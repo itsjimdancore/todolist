@@ -1,9 +1,9 @@
 'use client';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, Copy, Ellipsis, MessageCircle, Pencil, Reply, Trash2 } from 'lucide-react';
+import { ArrowUp, Copy, Ellipsis, Heart, MessageCircle, Pencil, Reply, Trash2 } from 'lucide-react';
 import { friendlyError } from '@/lib/firebase';
-import { addComment, deleteComment, editComment, emailOf } from '@/lib/data';
+import { addComment, deleteComment, editComment, emailOf, likeComment } from '@/lib/data';
 import { Avatar, toDate } from '@/lib/people';
 import { useDraft } from '@/lib/useDraft';
 import { commentMs } from '@/lib/useCommentsSeen';
@@ -28,6 +28,19 @@ function dayLabel(d) {
   });
 }
 const clock = (d) => d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+// Instagram-style short times: now, 5m, 2h, 3d, then the date
+function ago(d) {
+  const s = (Date.now() - d.getTime()) / 1000;
+  if (s < 60) return 'now';
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  if (s < 7 * 86400) return `${Math.floor(s / 86400)}d`;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(d.getFullYear() !== new Date().getFullYear() && { year: 'numeric' }) });
+}
+const EMOJI = ['❤️', '🙌', '🔥', '👏', '😢', '😍', '😮', '😂'];
+// The list page narrower than this shows Tasks | Comments as tabs (globals.css, @container lv) and the comments
+// switch to the phone layout: a flat list like Instagram's instead of chat bubbles
+const COMPACT_BELOW = 720;
 const firstName = (c) => (c.userName || c.userEmail || 'Someone').split(/[\s@]/)[0];
 
 // @mentions stand out in the text
@@ -48,6 +61,19 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
   const [sheet, setSheet] = useState(null); // the comment whose actions are open as a bottom sheet (touch)
   const [since, setSince] = useState(null); // "last read" as it was when I opened this list; the New line sits after it
   const me = emailOf(user);
+
+  // phone-sized page: Instagram-style list. Measured on the list page, the same box the tabs go by.
+  const rootRef = useRef(null);
+  const [compact, setCompact] = useState(false);
+  useLayoutEffect(() => {
+    const host = rootRef.current?.closest('.list-wrap') || rootRef.current;
+    if (!host) return;
+    const check = () => setCompact(host.clientWidth > 0 && host.clientWidth < COMPACT_BELOW);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, []);
 
   // take the "last read" time once per list, so the New line doesn't jump while I'm reading
   useEffect(() => { setSince(null); }, [listId]);
@@ -169,6 +195,31 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
       .catch((err) => toast(friendlyError(err), 'err'));
   }
 
+  // ♥ a comment (or take it back). force=true is the double-tap: it only ever likes.
+  const [pop, setPop] = useState(null); // the heart that just got liked, for its little bounce
+  useEffect(() => {
+    if (!pop) return;
+    const t = setTimeout(() => setPop(null), 450);
+    return () => clearTimeout(t);
+  }, [pop]);
+  const likedByMe = (c) => (c.likes || []).includes(user.uid);
+  function toggleLike(c, force) {
+    const was = likedByMe(c);
+    const on = force ?? !was;
+    if (on === was) return;
+    if (on) { setPop(c.id); navigator.vibrate?.(6); }
+    likeComment(list, c, user, on).catch((err) => toast(`Couldn't ${on ? 'like' : 'unlike'} that: ${friendlyError(err)}`, 'err'));
+  }
+  // "Liked by you and 2 others" for the heart's tooltip / screen readers
+  function likedBy(c) {
+    const n = (c.likes || []).length;
+    if (!n) return 'Like';
+    const mine = likedByMe(c);
+    const others = n - (mine ? 1 : 0);
+    if (mine) return others ? `Liked by you and ${others} other${others > 1 ? 's' : ''}` : 'Liked by you';
+    return `${n} like${n > 1 ? 's' : ''}`;
+  }
+
   function copy(c) {
     setSheet(null);
     Promise.resolve(navigator.clipboard?.writeText(c.text))
@@ -193,6 +244,19 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
+  // the emoji row: put it where the cursor is
+  function addEmoji(em) {
+    const el = inputRef.current;
+    const at = el && document.activeElement === el ? el.selectionStart : text.length;
+    const next = (text.slice(0, at) + em + text.slice(at)).slice(0, MAX);
+    setText(next);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(at + em.length, at + em.length);
+    });
+  }
+
   // touch: press and hold a comment for its actions
   const press = useRef(null);
   const holdStart = (c) => (e) => {
@@ -208,9 +272,103 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
 
   const left = MAX - text.length;
   const canDelete = (c) => c.userId === user.uid || isOwner;
+  const openSheet = (c) => { setConfirmDel(null); setSheet(c); };
+  const pressProps = (c) => ({
+    onPointerDown: holdStart(c),
+    onPointerMove: holdMove,
+    onPointerUp: holdEnd,
+    onPointerCancel: holdEnd,
+    onContextMenu: (e) => { if (window.matchMedia?.('(hover: none)').matches) e.preventDefault(); },
+  });
+
+  // editing my own comment, in place (both layouts)
+  const editBox = (c) => (
+    <div className="c-edit">
+      <textarea
+        autoFocus
+        value={draft}
+        maxLength={MAX}
+        aria-label="Edit your comment"
+        onFocus={(e) => {
+          e.target.setSelectionRange(e.target.value.length, e.target.value.length);
+          e.target.parentElement.scrollIntoView({ block: 'nearest' }); // Save and Cancel in view too
+        }}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && finePointer()) { e.preventDefault(); saveEdit(c); }
+          if (e.key === 'Escape') { e.stopPropagation(); setEditing(null); } // close just the editor, not the panel it's in
+        }}
+      />
+      <div className="c-edit-b">
+        <button className="btn" type="button" onClick={() => setEditing(null)}>Cancel</button>
+        <button className="btn primary" type="button" onClick={() => saveEdit(c)}>Save</button>
+      </div>
+    </div>
+  );
+
+  // Phones: one comment like Instagram's. [avatar] name · 2h / the text / Reply · Edit · ⋯
+  const igRow = ({ c, d, showNew, newCount, mine }) => (
+    <Fragment key={c.id}>
+      {showNew && <div className="c-new" role="separator">New · {newCount}</div>}
+      <div
+        className={`ig${mine ? ' mine' : ''}${editing === c.id ? ' is-editing' : ''}`}
+        {...(editing === c.id ? {} : { ...pressProps(c), onDoubleClick: (e) => { e.preventDefault(); toggleLike(c, true); } })}
+      >
+        <Avatar person={{ email: c.userEmail, displayName: c.userName }} size={34} />
+        <div className="ig-body">
+          <div className="ig-top">
+            <b className="ig-name">{mine ? 'You' : c.userName || c.userEmail}</b>
+            <time dateTime={d.toISOString()} title={d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}>
+              {c.createdAt ? ago(d) : 'Posting…'}
+            </time>
+          </div>
+          {editing === c.id ? editBox(c) : (
+            <>
+              <p className="ig-tx"><Text text={c.text} /></p>
+              <div className="ig-acts">
+                {c.editedAt && <span className="ig-edited" title={`Edited ${toDate(c.editedAt).toLocaleString()}`}>Edited</span>}
+                {!mine && <button type="button" onClick={() => reply(c)}>Reply</button>}
+                {mine && <button type="button" onClick={() => startEdit(c)}>Edit</button>}
+                <button type="button" className="ig-more" aria-label="More actions" onClick={() => openSheet(c)}><Ellipsis size={16} /></button>
+              </div>
+            </>
+          )}
+        </div>
+        {editing !== c.id && <LikeButton c={c} liked={likedByMe(c)} pop={pop === c.id} label={likedBy(c)} onClick={() => toggleLike(c)} className="ig-heart" />}
+      </div>
+    </Fragment>
+  );
+
+  // Phones: the emoji row, then [my avatar] [Add a comment…  Post]
+  const firstListener = listeners.length === 1 ? listeners[0] : null;
+  const igForm = (
+    <form className="c-form ig-form" onSubmit={send}>
+      <div className="ig-emoji" aria-label="Add an emoji">
+        {EMOJI.map((em) => <button key={em} type="button" onClick={() => addEmoji(em)} aria-label={`Add ${em}`}>{em}</button>)}
+      </div>
+      <div className="ig-compose">
+        <Avatar person={{ email: me, displayName: user.displayName }} size={34} />
+        <div className="ig-input">
+          <textarea
+            id="comment-text"
+            ref={inputRef}
+            rows={1}
+            value={text}
+            maxLength={MAX}
+            aria-label="Write a comment"
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && finePointer()) { e.preventDefault(); send(); } }}
+            placeholder={firstListener ? `Add a comment for ${firstListener}…` : 'Add a comment…'}
+          />
+          <button className="ig-post" type="submit" disabled={!text.trim()}>Post</button>
+        </div>
+      </div>
+      {left < 200 && <div className="c-foot"><span className={`c-left${left < 50 ? ' low' : ''}`}>{left} left</span></div>}
+    </form>
+  );
 
   return (
-    <aside className="panel comments" aria-label="Comments">
+    <aside className={`panel comments${compact ? ' is-compact' : ''}`} aria-label="Comments" ref={rootRef}>
       <div className="panel-h">
         <h2>Comments</h2>
         <span className="count">{comments.length}</span>
@@ -232,7 +390,9 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
           </div>
         )}
 
-        {rows.map(({ c, d, showDay, showNew, newCount, cont, mine }) => {
+        {rows.map((row) => {
+          if (compact) return igRow(row);
+          const { c, d, showDay, showNew, newCount, cont, mine } = row;
           const full = d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
           return (
             <Fragment key={c.id}>
@@ -251,41 +411,15 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
                     </div>
                   )}
 
-                  {editing === c.id ? (
-                    <div className="c-edit">
-                      <textarea
-                        autoFocus
-                        value={draft}
-                        maxLength={MAX}
-                        aria-label="Edit your comment"
-                        onFocus={(e) => {
-                          e.target.setSelectionRange(e.target.value.length, e.target.value.length);
-                          e.target.parentElement.scrollIntoView({ block: 'nearest' }); // Save and Cancel in view too
-                        }}
-                        onChange={(e) => setDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey && finePointer()) { e.preventDefault(); saveEdit(c); }
-                          if (e.key === 'Escape') { e.stopPropagation(); setEditing(null); } // close just the editor, not the panel it's in
-                        }}
-                      />
-                      <div className="c-edit-b">
-                        <button className="btn" type="button" onClick={() => setEditing(null)}>Cancel</button>
-                        <button className="btn primary" type="button" onClick={() => saveEdit(c)}>Save</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      className="bubble"
-                      title={cont ? full : undefined}
-                      onPointerDown={holdStart(c)}
-                      onPointerMove={holdMove}
-                      onPointerUp={holdEnd}
-                      onPointerCancel={holdEnd}
-                      onContextMenu={(e) => { if (window.matchMedia?.('(hover: none)').matches) e.preventDefault(); }}
-                    >
+                  {editing === c.id ? editBox(c) : (
+                    <div className="bubble" title={cont ? full : undefined} {...pressProps(c)}>
                       <div className="tx"><Text text={c.text} /></div>
                       {/* mouse and keyboard: a small toolbar on hover or focus */}
                       <div className="c-tools" role="toolbar" aria-label="Comment actions">
+                        <button type="button" className={`like${likedByMe(c) ? ' on' : ''}`} onClick={() => toggleLike(c)}
+                          aria-pressed={likedByMe(c)} aria-label={likedByMe(c) ? 'Unlike' : 'Like'} title={likedByMe(c) ? 'Unlike' : 'Like'}>
+                          <Heart size={14} fill={likedByMe(c) ? 'currentColor' : 'none'} />
+                        </button>
                         {!mine && <button type="button" onClick={() => reply(c)} aria-label="Reply" title="Reply"><Reply size={14} /></button>}
                         <button type="button" onClick={() => copy(c)} aria-label="Copy text" title="Copy"><Copy size={14} /></button>
                         {mine && <button type="button" onClick={() => startEdit(c)} aria-label="Edit comment" title="Edit"><Pencil size={14} /></button>}
@@ -298,9 +432,13 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
                       </div>
                     </div>
                   )}
+                  {/* a little ♥ count under the bubble once someone has liked it */}
+                  {editing !== c.id && (c.likes || []).length > 0 && (
+                    <LikeButton c={c} liked={likedByMe(c)} pop={pop === c.id} label={likedBy(c)} onClick={() => toggleLike(c)} className="c-likes" />
+                  )}
                 </div>
                 {editing !== c.id && (
-                  <button className="c-more" type="button" aria-label="Comment actions" onClick={() => { setConfirmDel(null); setSheet(c); }}>
+                  <button className="c-more" type="button" aria-label="Comment actions" onClick={() => openSheet(c)}>
                     <Ellipsis size={18} />
                   </button>
                 )}
@@ -310,7 +448,7 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
         })}
       </div>
 
-      <form className="c-form" onSubmit={send}>
+      {compact ? igForm : <form className="c-form" onSubmit={send}>
         {!hint && listeners.length > 0 && (
           <div className="c-notify"><i aria-hidden="true" />{names} will be notified</div>
         )}
@@ -334,7 +472,7 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
           <span className="c-keys">Enter to send · Shift+Enter for a new line</span>
           {left < 200 && <span className={`c-left${left < 50 ? ' low' : ''}`}>{left} left</span>}
         </div>
-      </form>
+      </form>}
 
       {sheet && <ActionSheet c={sheet} mine={sheet.userId === user.uid} canDelete={canDelete(sheet)} confirm={confirmDel === sheet.id}
         onReply={() => reply(sheet)} onCopy={() => copy(sheet)} onEdit={() => startEdit(sheet)} onDelete={() => remove(sheet)}
@@ -374,5 +512,17 @@ function ActionSheet({ c, mine, canDelete, confirm, onReply, onCopy, onEdit, onD
       </div>
     </div>,
     document.body,
+  );
+}
+
+// The ♥ with its count: on the right of each comment on phones (like Instagram), under the bubble otherwise
+function LikeButton({ c, liked, pop, label, onClick, className }) {
+  const n = (c.likes || []).length;
+  return (
+    <button type="button" className={`${className}${liked ? ' on' : ''}${pop ? ' pop' : ''}`} onClick={onClick}
+      aria-pressed={liked} aria-label={liked ? `Unlike. ${label}` : `Like. ${label}`} title={label}>
+      <Heart size={className === 'ig-heart' ? 15 : 12} strokeWidth={2} fill={liked ? 'currentColor' : 'none'} />
+      {n > 0 && <span>{n}</span>}
+    </button>
   );
 }

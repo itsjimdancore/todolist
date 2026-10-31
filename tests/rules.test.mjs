@@ -243,6 +243,34 @@ describe('comments', () => {
     await assertFails(edit('commenter', 'c2', { text: '' }));
     await assertFails(edit('commenter', 'c2', { text: 'x'.repeat(2001) }));
   });
+  // ♥ likes: a list of uids; each person adds or removes only themselves
+  const like = (who, id, on = true) =>
+    updateDoc(doc(as(who), 'lists', LIST, 'comments', id), { likes: on ? arrayUnion(people[who].uid) : arrayRemove(people[who].uid) });
+  test('anyone who can comment can like and unlike any comment', async () => {
+    await seed('c2', 'commenter');
+    await assertSucceeds(like('owner', 'c2'));
+    await assertSucceeds(like('rw', 'c2'));
+    await assertSucceeds(like('commenter', 'c2')); // your own too
+    await assertSucceeds(like('rw', 'c2', false));
+  });
+  test('people without comment access cannot like', async () => {
+    await seed('c2', 'commenter');
+    for (const who of ['reader', 'writer', 'stranger']) await assertFails(like(who, 'c2'));
+  });
+  test('cannot like for someone else, or take away their like', async () => {
+    await seed('c2', 'commenter');
+    await assertFails(updateDoc(doc(as('rw'), 'lists', LIST, 'comments', 'c2'), { likes: ['owner'] }));
+    await assertSucceeds(like('owner', 'c2'));
+    await assertFails(updateDoc(doc(as('rw'), 'lists', LIST, 'comments', 'c2'), { likes: arrayRemove('owner') }));
+    await assertFails(updateDoc(doc(as('rw'), 'lists', LIST, 'comments', 'c2'), { likes: [] }));
+  });
+  test('a like cannot be counted twice or carry other changes', async () => {
+    await seed('c2', 'commenter');
+    await assertSucceeds(like('rw', 'c2'));
+    await assertFails(updateDoc(doc(as('rw'), 'lists', LIST, 'comments', 'c2'), { likes: ['rw', 'rw'] }));
+    await assertFails(updateDoc(doc(as('owner'), 'lists', LIST, 'comments', 'c2'), { likes: arrayUnion('owner'), text: 'sneaky' }));
+  });
+
   test('edit must be stamped with the time', async () => {
     await seed('c2', 'commenter');
     await assertFails(updateDoc(doc(as('commenter'), 'lists', LIST, 'comments', 'c2'), { text: 'fixed' }));

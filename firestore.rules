@@ -271,6 +271,14 @@ service cloud.firestore {
 
       // ---------- comments ----------
       match /comments/{commentId} {
+        // the new likes list is the old one plus me (not there yet) or minus me (there), nothing else
+        function likeToggle(before, after) {
+          let me = [request.auth.uid].toSet();
+          return after is list && (
+            (!(request.auth.uid in before) && after.size() == before.size() + 1 && after.toSet() == before.toSet().union(me))
+            || (request.auth.uid in before && after.size() == before.size() - 1 && after.toSet() == before.toSet().difference(me))
+          );
+        }
         allow read: if canComment(roleIn(listData(listId)));
         allow create: if canComment(roleIn(listData(listId)))
           && request.resource.data.keys().hasOnly(['text', 'userId', 'userName', 'userEmail', 'createdAt'])
@@ -278,12 +286,16 @@ service cloud.firestore {
           && request.resource.data.text is string
           && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 2000;
         // edit your own comment (just its words), while you can still comment; it's marked as edited
-        allow update: if canComment(roleIn(listData(listId)))
-          && resource.data.userId == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
-          && request.resource.data.text is string
-          && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 2000
-          && request.resource.data.editedAt == request.time;
+        allow update: if canComment(roleIn(listData(listId))) && (
+          (resource.data.userId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
+            && request.resource.data.text is string
+            && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 2000
+            && request.resource.data.editedAt == request.time)
+          // ♥ any comment you can see: likes is a list of uids, and you may only add or remove your own
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+            && likeToggle(resource.data.get('likes', []), request.resource.data.likes))
+        );
         // delete your own comment; the owner can tidy any comment
         allow delete: if signedIn() && (
           resource.data.userId == request.auth.uid

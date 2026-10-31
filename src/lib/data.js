@@ -409,6 +409,12 @@ export function editComment(list, id, user, text) {
   return send(b);
 }
 
+// ♥ a comment, or take it back. likes is a list of the uids who liked it; each person can only add or
+// remove themselves (firestore.rules). No notification: a like is quiet, like Instagram's.
+export function likeComment(list, comment, user, on) {
+  return updateDoc(doc(commentsCol(list.id), comment.id), { likes: on ? arrayUnion(user.uid) : arrayRemove(user.uid) });
+}
+
 export function deleteComment(list, comment, user) {
   const b = writeBatch(db());
   b.delete(doc(commentsCol(list.id), comment.id));
