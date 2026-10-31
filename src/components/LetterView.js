@@ -6,6 +6,7 @@ import { PERMISSIONS, canComment, canWrite, roleLabel } from '@/lib/permissions'
 import { Avatar, displayName, timeAgo } from '@/lib/people';
 import { useToast } from './Toast';
 import Comments from './Comments';
+import { unreadCount, useCommentsSeen } from '@/lib/useCommentsSeen';
 import ShareModal from './ShareModal';
 import { BurntPaper } from './Letters';
 
@@ -47,6 +48,8 @@ export default function LetterView({ list, role, user, contacts, onLeave, onDele
     if (!comment) return setComments([]);
     return watchComments(list.id, setComments, () => setComments([]));
   }, [list.id, comment]);
+  const seenComments = useCommentsSeen(list.id, user.uid);
+  const unread = unreadCount(comments, user.uid, seenComments.seen);
 
   async function saveTitle(e) {
     e?.preventDefault();
@@ -117,7 +120,7 @@ export default function LetterView({ list, role, user, contacts, onLeave, onDele
             Letter
           </button>
           <button type="button" role="tab" aria-selected={pane === 'comments'} className={pane === 'comments' ? 'on' : ''} onClick={() => setPane('comments')}>
-            Comments <span>{comments.length}</span>
+            Comments <span>{comments.length}</span>{unread > 0 && <i className="lv-dot" aria-label={`${unread} new`} />}
           </button>
         </div>
       )}
@@ -138,6 +141,9 @@ export default function LetterView({ list, role, user, contacts, onLeave, onDele
             comments={comments}
             user={user}
             isOwner={isOwner}
+            seen={seenComments.seen}
+            seenReady={seenComments.ready}
+            onSeen={seenComments.markSeen}
             hint={isOwner && !(recipient && canComment(recipient.permission))
               ? 'Only you can see this thread until you send the letter with Comment only or Read & write access.' : null}
           />
