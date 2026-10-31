@@ -457,9 +457,19 @@ button.music-next:hover b { color: var(--accent); }
 .banner { font-size: 13px; padding: 8px 12px; border-radius: 8px; background: var(--sunk); color: var(--muted); }
 .banner b { color: var(--fg); }
 
-.grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
-.grid.solo { grid-template-columns: minmax(0, 1fr); }
-@media (max-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+/* Tasks (or the letter) and Comments: side by side whenever the page itself is wide enough, whatever the device
+   (a tablet, a laptop with the sidebar open, a phone in landscape); one at a time with tabs when it isn't.
+   This goes by the width of the list page (a container query), not the window, because the sidebar takes a share. */
+.list-wrap { container: lv / inline-size; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@container lv (min-width: 720px) {
+  .grid:not(.solo) { grid-template-columns: minmax(0, 1fr) 320px; }
+  /* the comments stay in view, the height of the window, while the tasks scroll */
+  .grid:not(.solo) > .comments { position: sticky; top: 0; height: min(780px, calc(100dvh - 200px)); min-height: 380px; max-height: none; }
+}
+@container lv (min-width: 1000px) {
+  .grid:not(.solo) { grid-template-columns: minmax(0, 1fr) 380px; }
+}
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
 .panel-h { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); gap: 8px; }
 .count { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -489,32 +499,125 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
 .panel > .arch-toggle:last-child { border-radius: 0 0 var(--r) var(--r); }
 .danger-zone { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 14px; }
 
-/* comments */
-.comments { display: flex; flex-direction: column; max-height: 620px; }
+/* ---------- comments ---------- */
+.comments { display: flex; flex-direction: column; max-height: 640px; }
 .hint { font-size: 12.5px; color: var(--muted); background: var(--sunk); padding: 8px 16px; }
 /* the thread scrolls on its own, with the same thin scrollbar as the page's to-do list */
-.thread { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable;
-  padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 120px; }
-/* side by side with the tasks: the comments stay in view while the tasks scroll */
-@media (min-width: 1101px) {
-  .grid > .comments { position: sticky; top: 0; max-height: min(620px, calc(100dvh - 190px)); }
+.thread { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable;
+  padding: 10px 14px 16px; display: flex; flex-direction: column; flex: 1; min-height: 140px; }
+
+/* day dividers, and the line where comments I haven't read start */
+.c-day, .c-new { display: flex; align-items: center; gap: 10px; margin: 16px 0 6px; font-family: var(--mono); font-size: 11px; }
+.c-day { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.c-day:first-child { margin-top: 4px; }
+.c-day::before, .c-day::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.c-new { color: var(--danger); font-weight: 600; }
+.c-new::after { content: ''; flex: 1; height: 1px; background: color-mix(in srgb, var(--danger) 55%, transparent); }
+
+/* one comment: [avatar] [name · time / bubble] [⋯]; mine sit on the right without an avatar */
+.c { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
+.c.cont { margin-top: 3px; } /* the same person again within a few minutes: no repeated name or avatar */
+.c.mine { flex-direction: row-reverse; }
+.c-sp { width: 28px; flex: none; }
+.c-col { display: flex; flex-direction: column; gap: 3px; min-width: 0; max-width: min(85%, 560px); }
+.c.mine .c-col { align-items: flex-end; }
+.c.is-editing .c-col { flex: 1; max-width: 100%; }
+.nm { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; padding: 0 4px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.nm b { color: var(--fg); font-weight: 600; font-size: 12.5px; overflow-wrap: anywhere; }
+.tm { font-family: var(--mono); font-size: 11px; color: var(--muted); font-weight: 400; }
+.c-edited { font-style: italic; }
+.bubble { position: relative; min-width: 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: 14px 14px 14px 4px; background: var(--sunk); }
+.c.cont .bubble { border-top-left-radius: 4px; }
+.c.mine .bubble { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); border-radius: 14px 14px 4px 14px; }
+.c.mine.cont .bubble { border-radius: 14px 4px 4px 14px; }
+.tx { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
+.c-mention { color: var(--p-comment); font-weight: 600; }
+
+/* mouse and keyboard: Reply · Copy · Edit · Delete float over the bubble on hover or focus */
+.c-tools { position: absolute; z-index: 1; top: -15px; left: 8px; display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); box-shadow: 0 4px 14px rgb(0 0 0 / .35); opacity: 0; pointer-events: none; transition: opacity .12s; }
+.c.mine .c-tools { left: auto; right: 8px; }
+.c-tools button { display: inline-flex; align-items: center; gap: 4px; min-width: 26px; height: 26px; padding: 0 6px; border: none; border-radius: 6px;
+  background: transparent; color: var(--muted); font-family: var(--mono); font-size: 12px; justify-content: center; }
+.c-tools button:hover { background: var(--sunk); color: var(--fg); }
+.c-tools .del:hover, .c-tools .del.on { background: var(--danger-soft); color: var(--danger); }
+.c-tools:focus-within { opacity: 1; pointer-events: auto; }
+@media (hover: hover) { .bubble:hover .c-tools { opacity: 1; pointer-events: auto; } }
+/* touch: a ⋯ beside each comment (or press and hold) opens the actions as a sheet */
+.c-more { display: none; }
+@media (hover: none) {
+  .c-tools { display: none; }
+  .c-more { display: grid; place-items: center; flex: none; align-self: center; width: 32px; height: 32px; padding: 0; border: none; border-radius: 8px;
+    background: transparent; color: var(--muted); opacity: .6; }
+  .c-more:active { background: var(--sunk); opacity: 1; }
+  .bubble { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 }
-.c { display: flex; gap: 8px; }
-.bubble { min-width: 0; flex: 1; }
-.nm { font-size: 13px; font-weight: 600; display: flex; align-items: center; flex-wrap: wrap; }
-.tm { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: 6px; font-weight: 400; }
-.tx { font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; }
-.c-form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
-.c-form textarea { flex: 1; resize: none; height: 42px; }
+
+/* nothing said yet */
+.c-empty { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: 300px; padding: 24px 12px; text-align: center; }
+.c-empty-ic { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 4px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.c-empty b { font-size: 16px; }
+.c-empty p { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.c-quick { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 8px; }
+.c-quick button { height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted);
+  font-family: var(--mono); font-size: 12.5px; }
+.c-quick button:hover { border-color: var(--accent); color: var(--fg); }
+
+/* writing: who'll hear about it, a box that grows, a round send button */
+.c-form { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--line); background: var(--surface);
+  border-radius: 0 0 var(--r) var(--r); }
+.c-notify { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0 2px; font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c-notify i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--p-comment); }
+.c-box { display: flex; align-items: flex-end; gap: 8px; padding: 4px 4px 4px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg);
+  transition: border-color .15s, box-shadow .15s; }
+.c-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.c-box textarea { flex: 1; min-width: 0; max-height: 160px; padding: 7px 0; border: none; border-radius: 0; background: transparent; resize: none; line-height: 1.4; }
+.c-box textarea:focus-visible { outline: none; }
+.c-send { flex: none; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: none; border-radius: 10px;
+  background: var(--accent); color: var(--accent-ink); transition: background .15s, color .15s; }
+.c-send:hover:not(:disabled) { filter: brightness(1.07); }
+.c-send:disabled { background: var(--sunk); color: var(--muted); cursor: default; }
+.c-foot { display: flex; justify-content: space-between; gap: 8px; padding: 0 2px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.c-left { margin-left: auto; font-variant-numeric: tabular-nums; }
+.c-left.low { color: var(--danger); }
+/* the keyboard hint only where there's a keyboard */
+@media not ((hover: hover) and (pointer: fine)) {
+  .c-keys { display: none; }
+  .c-foot:not(:has(.c-left)) { display: none; }
+}
+
 /* editing my own comment, in place */
-.c-edit { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
-.c-edit textarea { width: 100%; min-height: 64px; resize: vertical; font-size: 14px; field-sizing: content; }
-.c-edit-b { display: flex; gap: 6px; }
+.c-edit { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.c-edit textarea { width: 100%; min-height: 64px; resize: vertical; font-size: 14px; field-sizing: content; border-color: var(--accent); border-radius: 10px; }
+.c-edit-b { display: flex; justify-content: flex-end; gap: 6px; }
 .c-edit-b .btn { padding: 5px 12px; font-size: 13px; }
-.c-edited { margin-left: 4px; font-style: italic; }
+
+/* touch: a comment's actions, in a sheet up from the bottom */
+.c-sheet-scrim { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgb(5 10 9 / .6); }
+.c-sheet { display: flex; flex-direction: column; width: min(520px, 100%); padding: 8px 8px max(12px, env(safe-area-inset-bottom));
+  border: 1px solid var(--line); border-bottom: none; border-radius: 18px 18px 0 0; background: var(--surface); box-shadow: 0 -12px 40px rgb(0 0 0 / .4); }
+.c-sheet-grab { width: 40px; height: 4px; margin: 2px auto 10px; border-radius: 2px; background: var(--line); }
+.c-sheet-q { margin: 0 8px 8px; padding: 10px 12px; border-radius: 10px; background: var(--sunk); color: var(--muted); font-size: 13.5px;
+  white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.c-sheet button { display: flex; align-items: center; gap: 14px; height: 52px; padding: 0 14px; border: none; border-radius: 10px; background: transparent;
+  font-size: 16px; text-align: left; }
+.c-sheet button svg { flex: none; color: var(--muted); }
+.c-sheet button:hover, .c-sheet button:focus-visible { background: var(--sunk); }
+.c-sheet .del, .c-sheet .del svg { color: var(--danger); }
+.c-sheet .cancel { justify-content: center; margin-top: 6px; border-top: 1px solid var(--line); border-radius: 0; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .c-sheet-scrim { animation: c-fade .15s ease-out; }
+  .c-sheet { animation: c-up .22s cubic-bezier(.2, .8, .2, 1); }
+}
+@keyframes c-fade { from { opacity: 0; } }
+@keyframes c-up { from { transform: translateY(100%); } }
+
+/* the dot on the Comments tab when there's something new */
+.lv-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
 
 /* list view extras: only shown on phones */
-.lv-tabs, .add-plus { display: none; }
+.lv-tabs, .seg.lv-tabs, .add-plus { display: none; }
 .avatars .av-more { width: 30px; height: 30px; margin-left: -8px; background: var(--sunk); color: var(--muted); font-size: 11px; border: 2px solid var(--bg); }
 
 /* ---- a list on phones and small tablets ---- */
@@ -533,15 +636,6 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
   .rename input { font-size: 20px; width: 100%; }
   .banner { padding: 8px 10px; font-size: 12.5px; line-height: 1.45; }
   .archived-banner { display: flex; align-items: center; gap: 10px; }
-
-  /* Tasks | Comments tabs; only the chosen one shows */
-  .lv-tabs { display: flex; }
-  .lv-tabs button { flex: 1; height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; }
-  .lv-tabs button span { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--sunk); font-family: var(--mono); font-size: 11px; color: var(--muted); }
-  .lv-tabs button.on span { background: var(--accent-soft); color: var(--accent); }
-  .grid.show-tasks .comments, .grid.show-comments .lv-tasks { display: none; }
-  .lv-tasks .panel-h, .lv-tabs ~ .page-body .comments > .panel-h { display: none; } /* the tabs already say "Tasks 2/5", "Comments 3" */
-  .grid.solo .lv-tasks .panel-h { display: flex; }
 
   /* adding a task: the box, the date, and a round + */
   .add { padding: 10px 12px; gap: 6px; align-items: center; }
@@ -569,18 +663,29 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
   .empty { padding: 18px 12px; }
   .arch-toggle { padding: 12px; }
 
-  /* comments fill the tab; the write box stays at the bottom of the screen */
+  /* comments: the write box stays at the bottom of the screen, above the home bar */
+  .thread { padding: 10px 12px 14px; }
+  .c-form { position: sticky; bottom: 0; padding: 10px 12px max(10px, env(safe-area-inset-bottom)); }
+  .c-box textarea, .c-edit textarea { font-size: 16px; } /* 16px or iPhone zooms in on focus */
+  .c-send { width: 40px; height: 40px; }
+  .c-col { max-width: 88%; }
+  .danger-zone { justify-content: center; padding: 8px 0 4px; }
+}
+
+/* ---- the list page too narrow for two columns: Tasks | Comments tabs, only the chosen one shows ---- */
+@container lv (max-width: 719px) {
+  .seg.lv-tabs { display: flex; }
+  .lv-tabs button { flex: 1; height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; }
+  .lv-tabs button span { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--sunk); font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .lv-tabs button.on span { background: var(--accent-soft); color: var(--accent); }
+  .grid.show-tasks .comments, .grid.show-comments .lv-tasks { display: none; }
+  .lv-tasks .panel-h, .lv-tabs ~ .page-body .comments > .panel-h { display: none; } /* the tabs already say "Tasks 2/5", "Comments 3" */
+  .grid.solo .lv-tasks .panel-h { display: flex; }
   /* the Comments tab fills the space under the tabs and only the thread scrolls */
   .page-body > .grid.show-comments { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 320px; }
   .grid.show-comments > .comments { flex: 1; min-height: 0; max-height: none; }
   .comments { max-height: none; }
-  .thread { padding: 12px; min-height: 0; }
-  .c-form { position: sticky; bottom: 0; padding: 10px 12px max(10px, env(safe-area-inset-bottom)); background: var(--surface);
-    border-radius: 0 0 var(--r) var(--r); }
-  .c-form textarea { font-size: 16px; height: 44px; }
-  .c-edit textarea { font-size: 16px; }
-  .c-form .btn { height: 44px; }
-  .danger-zone { justify-content: center; padding: 8px 0 4px; }
+  .thread { min-height: 0; }
 }
 
 /* share modal */

@@ -17,6 +17,7 @@ import { useToast } from './Toast';
 import AddTask from './AddTask';
 import TaskItem from './TaskItem';
 import Comments from './Comments';
+import { unreadCount, useCommentsSeen } from '@/lib/useCommentsSeen';
 import ShareModal from './ShareModal';
 import Loading from './Loading';
 import TaskDetails from './TaskDetails';
@@ -64,6 +65,8 @@ export default function ListView({ list, role, user, contacts, onLeave, onDelete
     if (!comment) return setComments([]);
     return watchComments(list.id, setComments, () => setComments([]));
   }, [list.id, comment]);
+  const seenComments = useCommentsSeen(list.id, user.uid);
+  const unread = unreadCount(comments, user.uid, seenComments.seen);
 
   // Firestore shows changes on screen immediately and syncs them in the background.
   // If the database refuses a change, it's undone automatically and we show why.
@@ -187,7 +190,7 @@ export default function ListView({ list, role, user, contacts, onLeave, onDelete
             Tasks <span>{tasks ? `${active.filter((t) => t.done).length}/${active.length}` : '…'}</span>
           </button>
           <button type="button" role="tab" aria-selected={pane === 'comments'} className={pane === 'comments' ? 'on' : ''} onClick={() => setPane('comments')}>
-            Comments <span>{comments.length}</span>
+            Comments <span>{comments.length}</span>{unread > 0 && <i className="lv-dot" aria-label={`${unread} new`} />}
           </button>
         </div>
       )}
@@ -227,6 +230,9 @@ export default function ListView({ list, role, user, contacts, onLeave, onDelete
             comments={comments}
             user={user}
             isOwner={isOwner}
+            seen={seenComments.seen}
+            seenReady={seenComments.ready}
+            onSeen={seenComments.markSeen}
             hint={isOwner && !someoneCanComment ? 'Only you can see this thread until you share with Comment only or Read & write access.' : null}
           />
         )}
