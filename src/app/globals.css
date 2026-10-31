@@ -572,7 +572,7 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
 .c-box { display: flex; align-items: flex-end; gap: 8px; padding: 4px 4px 4px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg);
   transition: border-color .15s, box-shadow .15s; }
 .c-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.c-box textarea { flex: 1; min-width: 0; max-height: 160px; padding: 7px 0; border: none; border-radius: 0; background: transparent; resize: none; line-height: 1.4; }
+.c-box textarea { flex: 1 1 0; width: 0; min-width: 0; max-height: 160px; padding: 7px 0; border: none; border-radius: 0; background: transparent; resize: none; line-height: 1.4; }
 .c-box textarea:focus-visible { outline: none; }
 .c-send { flex: none; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: none; border-radius: 10px;
   background: var(--accent); color: var(--accent-ink); transition: background .15s, color .15s; }
@@ -612,6 +612,72 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
 }
 @keyframes c-fade { from { opacity: 0; } }
 @keyframes c-up { from { transform: translateY(100%); } }
+
+/* ---- phone-sized page: comments laid out like Instagram's (Comments.js switches to this below 720px) ----
+   a flat list, everyone on the left:  [avatar]  name  2h
+                                                 the comment text
+                                                 Edited  Reply  ⋯                                      */
+.comments.is-compact .thread { padding: 6px 14px 12px; }
+.ig { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; -webkit-tap-highlight-color: transparent; }
+.ig + .ig { border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+.ig > .av { margin-top: 2px; }
+.ig-body { flex: 1; min-width: 0; }
+.ig-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-family: var(--mono); }
+.ig-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; color: var(--fg); }
+.ig.mine .ig-name { color: var(--accent); }
+.ig-top time { flex: none; font-size: 12px; color: var(--muted); }
+.ig-tx { margin: 2px 0 0; font-size: 15px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ig-acts { display: flex; align-items: center; gap: 18px; margin-top: 4px; font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.ig-acts button { display: inline-flex; align-items: center; min-height: 30px; padding: 0; border: none; background: transparent; color: inherit;
+  font: inherit; -webkit-tap-highlight-color: transparent; }
+.ig-acts button:active { color: var(--fg); }
+.ig-edited { font-weight: 400; font-style: italic; }
+.ig-more { margin-left: auto; width: 30px; justify-content: center; }
+.ig.is-editing .c-edit { margin-top: 6px; }
+@media (hover: none) { .ig:not(.is-editing) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }
+.comments.is-compact .c-new { margin: 10px 0 2px; }
+
+/* ♥ on the right of each comment, the count under it; double-tap the comment to like it */
+.ig { touch-action: manipulation; } /* double-tap likes instead of zooming */
+.ig-heart { flex: none; display: flex; flex-direction: column; align-items: center; gap: 1px; width: 32px; min-height: 40px; margin: 2px -6px 0 0;
+  padding: 6px 0 0; border: none; background: transparent; color: var(--muted); font-family: var(--mono); font-size: 11px; line-height: 1;
+  -webkit-tap-highlight-color: transparent; }
+.ig-heart:hover { color: var(--fg); }
+.ig-heart.on { color: #ff3b5c; }
+.ig-heart span { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* chat layout: the heart in the hover bar, and a small count under a liked bubble */
+.c-tools .like.on { color: #ff3b5c; }
+.c-likes { display: inline-flex; align-items: center; gap: 4px; height: 22px; margin-top: -1px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--muted); font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+.c-likes { align-self: flex-start; }
+.c.mine .c-likes { align-self: flex-end; }
+.c-likes.on { color: #ff3b5c; border-color: color-mix(in srgb, #ff3b5c 40%, var(--line)); }
+.c-likes.on span { color: var(--fg); }
+@media (prefers-reduced-motion: no-preference) {
+  :is(.ig-heart, .c-likes).pop svg { animation: heart-pop .45s cubic-bezier(.2, 1.6, .4, 1); }
+}
+@keyframes heart-pop { 0% { transform: scale(1); } 35% { transform: scale(1.45); } 100% { transform: scale(1); } }
+
+/* writing, Instagram-style: a row of emoji, then [my avatar] [ Add a comment…   Post ] */
+.ig-form { gap: 8px; padding-top: 8px; }
+.ig-emoji { display: flex; justify-content: space-between; padding: 0 2px; }
+.ig-emoji button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: none; border-radius: 50%; background: transparent;
+  font-size: 22px; line-height: 1; -webkit-tap-highlight-color: transparent; transition: transform .1s; }
+.ig-emoji button:active { transform: scale(1.25); }
+.ig-compose { display: flex; align-items: flex-end; gap: 10px; }
+.ig-compose > .av { margin-bottom: 5px; }
+.ig-input { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 4px; min-height: 44px; padding: 3px 4px 3px 14px; border: 1px solid var(--line);
+  border-radius: 22px; background: var(--bg); transition: border-color .15s; }
+.ig-input:focus-within { border-color: var(--accent); }
+.ig-input textarea { flex: 1 1 0; width: 0; min-width: 0; max-height: 140px; padding: 9px 0; border: none; border-radius: 0; background: transparent; resize: none;
+  font-size: 16px; line-height: 1.35; } /* 16px or iPhone zooms in */
+.ig-input textarea:focus-visible { outline: none; }
+.ig-input textarea { scrollbar-width: none; }
+.ig-input textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* one line, even on a 320px phone */
+.ig-post { flex: none; height: 36px; padding: 0 10px; border: none; border-radius: 18px; background: transparent; color: var(--accent);
+  font-family: var(--mono); font-size: 14.5px; font-weight: 700; }
+.ig-post:disabled { opacity: .4; cursor: default; }
+@media (max-width: 360px) { .ig-emoji button { width: 32px; height: 32px; font-size: 20px; } }
 
 /* the dot on the Comments tab when there's something new */
 .lv-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
@@ -682,7 +748,8 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
   .lv-tasks .panel-h, .lv-tabs ~ .page-body .comments > .panel-h { display: none; } /* the tabs already say "Tasks 2/5", "Comments 3" */
   .grid.solo .lv-tasks .panel-h { display: flex; }
   /* the Comments tab fills the space under the tabs and only the thread scrolls */
-  .page-body > .grid.show-comments { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 320px; }
+  /* stretch, not shrink-to-fit: otherwise the panel takes its content's width and can run off the right edge */
+  .page-body > .grid.show-comments { display: flex; flex-direction: column; align-items: stretch; flex: 1 1 auto; min-height: 320px; }
   .grid.show-comments > .comments { flex: 1; min-height: 0; max-height: none; }
   .comments { max-height: none; }
   .thread { min-height: 0; }
