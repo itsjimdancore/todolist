@@ -29,7 +29,21 @@ export async function pushState() {
   if (!(await isSupported().catch(() => false))) return isIOS() && !installed() ? 'ios-needs-home-screen' : 'unsupported';
   if (!VAPID_KEY) return 'not-set-up';
   if (Notification.permission === 'denied') return 'blocked';
-  return Notification.permission === 'granted' && stored() ? 'on' : 'off';
+  if (Notification.permission !== 'granted') return 'off';
+  // The browser's own push subscription is what really decides it: it survives closing the app or
+  // the browser, and is only removed when they're turned off here (disablePush) or site data is cleared.
+  // The token kept in localStorage is just a copy, so it going missing doesn't turn them off.
+  return stored() || (await subscribed()) ? 'on' : 'off';
+}
+
+// Whether the notification helper on this device still holds a push subscription
+async function subscribed() {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration('/');
+    return !!(reg && (await reg.pushManager.getSubscription()));
+  } catch {
+    return false;
+  }
 }
 
 async function token() {
@@ -71,11 +85,14 @@ export async function sendTestPush(user) {
 }
 
 export async function disablePush() {
-  const t = stored();
-  if (!t) return 'off'; // never turned on here
+  let t = stored();
+  if (!t && !(await subscribed())) return 'off'; // never turned on here
+  if (!t) t = await token().catch(() => null); // the copy went missing: look it up so it's removed from my account too
   remember(null);
-  await removePushToken(t).catch(() => {});
+  if (t) await removePushToken(t).catch(() => {});
   try { await deleteToken(getMessaging(fb().app)); } catch {}
+  // and drop the browser's subscription itself, so it reads as off next time the app opens
+  try { await (await (await navigator.serviceWorker.getRegistration('/'))?.pushManager.getSubscription())?.unsubscribe(); } catch {}
   return 'off';
 }
 
