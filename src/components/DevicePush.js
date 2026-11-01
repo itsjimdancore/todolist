@@ -11,7 +11,7 @@ export function usePush(user) {
   const toast = useToast();
   const [state, setState] = useState(null); // null while checking
   const [busy, setBusy] = useState(false);
-  useEffect(() => { pushState().then(setState); }, []);
+  useEffect(() => { pushState(user).then(setState); }, [user]);
 
   async function run(fn, ok) {
     setBusy(true);
@@ -22,7 +22,7 @@ export function usePush(user) {
       if (next === 'blocked') toast({ title: 'Notifications are blocked', description: BLOCKED_HELP.replace(/^[^.]*\. /, ''), kind: 'err' });
     } catch (e) {
       toast(e?.message || "Couldn't turn device notifications on here. Try again, or try another browser.", 'err');
-      setState(await pushState());
+      setState(await pushState(user));
     }
     setBusy(false);
   }
@@ -30,7 +30,7 @@ export function usePush(user) {
     state,
     busy,
     on: () => run(() => enablePush(user), 'Device notifications are on for this device'),
-    off: () => run(async () => { await disablePush(); toast('Device notifications are off for this device'); return 'off'; }),
+    off: () => run(async () => { await disablePush(user); toast('Device notifications are off for this device'); return 'off'; }),
   };
 }
 
