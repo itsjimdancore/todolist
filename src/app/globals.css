@@ -587,11 +587,22 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
   .c-foot:not(:has(.c-left)) { display: none; }
 }
 
-/* editing my own comment, in place */
-.c-edit { display: flex; flex-direction: column; gap: 6px; width: 100%; }
-.c-edit textarea { width: 100%; min-height: 64px; resize: vertical; font-size: 14px; field-sizing: content; border-color: var(--accent); border-radius: 10px; }
-.c-edit-b { display: flex; justify-content: flex-end; gap: 6px; }
-.c-edit-b .btn { padding: 5px 12px; font-size: 13px; }
+/* editing my own comment: the same comment, its text editable where it sits, Cancel · Save under it */
+.c.is-editing .c-col { flex: 1 1 auto; }
+.c-edit-tx { display: block; width: 100%; min-width: 0; min-height: 0; margin: 0; padding: 0; border: none; border-radius: 0; background: transparent;
+  color: inherit; resize: none; overflow: hidden; field-sizing: content; }
+.c-edit-tx:focus-visible { outline: none; }
+@supports (-webkit-touch-callout: none) { .c-edit-tx { font-size: 16px; } } /* iPhone zooms in on anything smaller */
+.bubble.is-edit { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); cursor: text; }
+.c-edit-b { display: flex; align-items: center; gap: 16px; font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.c-edit-b button { display: inline-flex; align-items: center; min-height: 28px; padding: 0; border: none; background: transparent; color: var(--muted); font: inherit; }
+.c-edit-b .c-edit-cancel:hover { color: var(--fg); }
+.c-edit-b .c-edit-save { color: var(--accent); }
+.c-edit-b .c-edit-save:hover:not(:disabled) { filter: brightness(1.15); }
+.c-edit-b .c-edit-save:disabled { opacity: .45; cursor: default; }
+.c-edit-keys { font-size: 11px; font-weight: 400; }
+@media not ((hover: hover) and (pointer: fine)) { .c-edit-keys { display: none; } }
+.c-edit-under { align-self: flex-end; padding: 1px 4px 0; } /* chat layout: under my bubble, on its side */
 
 /* touch: a comment's actions, in a sheet up from the bottom */
 .c-sheet-scrim { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgb(5 10 9 / .6); }
@@ -633,7 +644,12 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
 .ig-acts button:active { color: var(--fg); }
 .ig-edited { font-weight: 400; font-style: italic; }
 .ig-more { margin-left: auto; width: 30px; justify-content: center; }
-.ig.is-editing .c-edit { margin-top: 6px; }
+/* phones: the text stays put, on a soft field; Cancel · Save take the place of Reply · Edit */
+.ig-tx.c-edit-tx { width: calc(100% + 16px); margin: 0 -8px; padding: 2px 8px; border-radius: 8px; background: var(--sunk);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+.ig-acts.c-edit-b { gap: 18px; }
+.ig-acts .c-edit-keys { display: none; } /* no room for it next to the buttons */
+.c-edit-keys { white-space: nowrap; }
 @media (hover: none) { .ig:not(.is-editing) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }
 .comments.is-compact .c-new { margin: 10px 0 2px; }
 
@@ -732,7 +748,7 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
   /* comments: the write box stays at the bottom of the screen, above the home bar */
   .thread { padding: 10px 12px 14px; }
   .c-form { position: sticky; bottom: 0; padding: 10px 12px max(10px, env(safe-area-inset-bottom)); }
-  .c-box textarea, .c-edit textarea { font-size: 16px; } /* 16px or iPhone zooms in on focus */
+  .c-box textarea { font-size: 16px; } /* 16px or iPhone zooms in on focus */
   .c-send { width: 40px; height: 40px; }
   .c-col { max-width: 88%; }
   .danger-zone { justify-content: center; padding: 8px 0 4px; }
