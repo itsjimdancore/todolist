@@ -13,6 +13,20 @@ const installed = () => window.matchMedia('(display-mode: standalone)').matches 
 const stored = () => { try { return localStorage.getItem(STORE); } catch { return null; } };
 const remember = (t) => { try { t ? localStorage.setItem(STORE, t) : localStorage.removeItem(STORE); } catch {} };
 
+// Who turned them on on this device. It's each person's own setting, so it stays as they left it
+// through signing out and back in, closing the app or the browser, until they switch it themselves.
+// null = never recorded (from before this was kept), anything else is a list of uids.
+const ON_FOR = 'pushOnFor';
+function onFor() {
+  try { const v = JSON.parse(localStorage.getItem(ON_FOR)); return Array.isArray(v) ? v : null; } catch { return null; }
+}
+function setOnFor(uid, on) {
+  const list = (onFor() || []).filter((u) => u !== uid);
+  if (on) list.push(uid);
+  try { localStorage.setItem(ON_FOR, JSON.stringify(list)); } catch {}
+  return list;
+}
+
 // A short name for this device, shown nowhere yet but handy when looking at the data
 function deviceName() {
   const ua = navigator.userAgent;
@@ -22,7 +36,7 @@ function deviceName() {
 }
 
 // 'on' | 'off' | 'blocked' | 'unsupported' | 'ios-needs-home-screen' | 'not-set-up'
-export async function pushState() {
+export async function pushState(user) {
   if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
     return isIOS() && !installed() ? 'ios-needs-home-screen' : 'unsupported';
   }
@@ -30,10 +44,13 @@ export async function pushState() {
   if (!VAPID_KEY) return 'not-set-up';
   if (Notification.permission === 'denied') return 'blocked';
   if (Notification.permission !== 'granted') return 'off';
-  // The browser's own push subscription is what really decides it: it survives closing the app or
-  // the browser, and is only removed when they're turned off here (disablePush) or site data is cleared.
-  // The token kept in localStorage is just a copy, so it going missing doesn't turn them off.
-  return stored() || (await subscribed()) ? 'on' : 'off';
+  // The browser's own push subscription: it survives closing the app or the browser and signing out,
+  // and is only dropped when the last person who turned them on here turns them off (or site data is cleared)
+  if (!stored() && !(await subscribed())) return 'off';
+  if (!user) return 'on';
+  const list = onFor();
+  if (list === null) { setOnFor(user.uid, true); return 'on'; } // turned on before this was kept: it was theirs
+  return list.includes(user.uid) ? 'on' : 'off';
 }
 
 // Whether the notification helper on this device still holds a push subscription
@@ -73,6 +90,7 @@ export async function enablePush(user) {
   if (old && old !== t) await removePushToken(old).catch(() => {});
   try { await savePushToken(user, t, deviceName()); } catch (e) { throw new Error(why('save this device', e)); }
   remember(t);
+  setOnFor(user.uid, true);
   return 'on';
 }
 
@@ -84,21 +102,37 @@ export async function sendTestPush(user) {
   return body.sent;
 }
 
-export async function disablePush() {
-  let t = stored();
-  if (!t && !(await subscribed())) return 'off'; // never turned on here
-  if (!t) t = await token().catch(() => null); // the copy went missing: look it up so it's removed from my account too
+// This device's token, if it has one (looked up again if the saved copy went missing)
+async function currentToken() {
+  return stored() || ((await subscribed()) ? await token().catch(() => null) : null);
+}
+
+// The switch, turned off by this person. The device stays subscribed while someone else who uses it
+// still has them on (they just won't get this person's), and is unsubscribed once nobody does.
+export async function disablePush(user) {
+  const left = user ? setOnFor(user.uid, false) : [];
+  const t = await currentToken();
+  if (!t) return 'off'; // never turned on here
+  await removePushToken(t).catch(() => {});
+  if (left.length) return 'off';
   remember(null);
-  if (t) await removePushToken(t).catch(() => {});
   try { await deleteToken(getMessaging(fb().app)); } catch {}
   // and drop the browser's subscription itself, so it reads as off next time the app opens
   try { await (await (await navigator.serviceWorker.getRegistration('/'))?.pushManager.getSubscription())?.unsubscribe(); } catch {}
   return 'off';
 }
 
-// Tokens change now and then; when the app opens with notifications on, make sure the saved one is current
+// Signing out: this device stops getting my notifications while nobody's signed in (and the next person
+// on it never gets mine), but my setting stays on; signing in again picks it straight back up (refreshPush)
+export async function pausePush() {
+  const t = await currentToken();
+  if (t) await removePushToken(t).catch(() => {});
+}
+
+// When the app opens or someone signs in with notifications on for them here: save this device to their
+// account again (after signing out, or if the token changed, which happens now and then)
 export async function refreshPush(user) {
-  if ((await pushState()) !== 'on') return;
+  if ((await pushState(user)) !== 'on') return;
   const t = await token().catch(() => null);
   if (!t) return;
   const old = stored();

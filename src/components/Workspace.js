@@ -28,7 +28,7 @@ import {
   watchSpotify,
 } from '@/lib/data';
 import { roleLabel } from '@/lib/permissions';
-import { disablePush, refreshPush } from '@/lib/push';
+import { pausePush, refreshPush } from '@/lib/push';
 import { Avatar, colorFor, displayName, toDate } from '@/lib/people';
 import Board from './Board';
 import Calendar, { dueNowCount, taskEntries, useAllTasks } from './Calendar';
@@ -278,10 +278,11 @@ function WorkspaceInner({ user }) {
   }
 
   // Clear ?list= and ?view= so the next person to sign in here starts on My List
-  // Device notifications stop too, so the next person on this device doesn't get mine
+  // This device stops getting my notifications until I sign in again (so the next person on it doesn't get mine),
+  // but my Device notifications setting stays as I left it
   async function onSignOut() {
     window.history.replaceState(null, '', window.location.pathname);
-    await disablePush().catch(() => {});
+    await pausePush().catch(() => {});
     signOut(fb().auth);
   }
 
