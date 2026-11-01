@@ -57,6 +57,7 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
   const inputRef = useRef(null);
   const [editing, setEditing] = useState(null); // the id of my comment being edited (one at a time)
   const [draft, setDraft] = useState('');
+  const [editW, setEditW] = useState(0); // the bubble's width when editing began
   const [confirmDel, setConfirmDel] = useState(null); // the id waiting for a second tap on Delete
   const [sheet, setSheet] = useState(null); // the comment whose actions are open as a bottom sheet (touch)
   const [since, setSince] = useState(null); // "last read" as it was when I opened this list; the New line sits after it
@@ -166,6 +167,9 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
   }
 
   function startEdit(c) {
+    // keep the bubble the width it is now, so editing doesn't make it jump (a little wider if it's tiny)
+    const b = threadRef.current?.querySelector(`[data-cid="${c.id}"] .bubble`);
+    setEditW(b ? Math.ceil(b.getBoundingClientRect().width) : 0);
     setSheet(null);
     setEditing(c.id);
     setDraft(c.text);
@@ -281,28 +285,38 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
     onContextMenu: (e) => { if (window.matchMedia?.('(hover: none)').matches) e.preventDefault(); },
   });
 
-  // editing my own comment, in place (both layouts)
-  const editBox = (c) => (
-    <div className="c-edit">
-      <textarea
-        autoFocus
-        value={draft}
-        maxLength={MAX}
-        aria-label="Edit your comment"
-        onFocus={(e) => {
-          e.target.setSelectionRange(e.target.value.length, e.target.value.length);
-          e.target.parentElement.scrollIntoView({ block: 'nearest' }); // Save and Cancel in view too
-        }}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && finePointer()) { e.preventDefault(); saveEdit(c); }
-          if (e.key === 'Escape') { e.stopPropagation(); setEditing(null); } // close just the editor, not the panel it's in
-        }}
-      />
-      <div className="c-edit-b">
-        <button className="btn" type="button" onClick={() => setEditing(null)}>Cancel</button>
-        <button className="btn primary" type="button" onClick={() => saveEdit(c)}>Save</button>
-      </div>
+  // Editing my own comment: the comment stays as it looks, its text just becomes editable, with Cancel / Save under it.
+  // The box grows with the text like the comment does (field-sizing where supported, by hand elsewhere).
+  const grow = (el) => {
+    if (!el || (typeof CSS !== 'undefined' && CSS.supports?.('field-sizing', 'content'))) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+  const editField = (c, className) => (
+    <textarea
+      className={`c-edit-tx ${className}`}
+      ref={grow}
+      autoFocus
+      rows={1}
+      value={draft}
+      maxLength={MAX}
+      aria-label="Edit your comment"
+      onFocus={(e) => {
+        e.target.setSelectionRange(e.target.value.length, e.target.value.length);
+        e.target.closest('.c, .ig')?.scrollIntoView({ block: 'nearest' }); // Save and Cancel in view too
+      }}
+      onChange={(e) => { setDraft(e.target.value); grow(e.target); }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.shiftKey && finePointer()) { e.preventDefault(); saveEdit(c); }
+        if (e.key === 'Escape') { e.stopPropagation(); setEditing(null); } // close just the editor, not the panel it's in
+      }}
+    />
+  );
+  const editActions = (c, className) => (
+    <div className={`c-edit-b ${className}`}>
+      <span className="c-edit-keys">Esc to cancel · Enter to save</span>
+      <button type="button" className="c-edit-cancel" onClick={() => setEditing(null)}>Cancel</button>
+      <button type="button" className="c-edit-save" onClick={() => saveEdit(c)} disabled={!draft.trim()}>Save</button>
     </div>
   );
 
@@ -311,6 +325,7 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
     <Fragment key={c.id}>
       {showNew && <div className="c-new" role="separator">New · {newCount}</div>}
       <div
+        data-cid={c.id}
         className={`ig${mine ? ' mine' : ''}${editing === c.id ? ' is-editing' : ''}`}
         {...(editing === c.id ? {} : { ...pressProps(c), onDoubleClick: (e) => { e.preventDefault(); toggleLike(c, true); } })}
       >
@@ -322,7 +337,12 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
               {c.createdAt ? ago(d) : 'Posting…'}
             </time>
           </div>
-          {editing === c.id ? editBox(c) : (
+          {editing === c.id ? (
+            <>
+              {editField(c, 'ig-tx')}
+              {editActions(c, 'ig-acts')}
+            </>
+          ) : (
             <>
               <p className="ig-tx"><Text text={c.text} /></p>
               <div className="ig-acts">
@@ -334,7 +354,7 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
             </>
           )}
         </div>
-        {editing !== c.id && <LikeButton c={c} liked={likedByMe(c)} pop={pop === c.id} label={likedBy(c)} onClick={() => toggleLike(c)} className="ig-heart" />}
+        <LikeButton c={c} liked={likedByMe(c)} pop={pop === c.id} label={likedBy(c)} onClick={() => toggleLike(c)} className="ig-heart" />
       </div>
     </Fragment>
   );
@@ -398,7 +418,7 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
             <Fragment key={c.id}>
               {showDay && <div className="c-day" role="separator"><span>{dayLabel(d)}</span></div>}
               {showNew && <div className="c-new" role="separator">New · {newCount}</div>}
-              <div className={`c${mine ? ' mine' : ''}${cont ? ' cont' : ''}${editing === c.id ? ' is-editing' : ''}`}>
+              <div data-cid={c.id} className={`c${mine ? ' mine' : ''}${cont ? ' cont' : ''}${editing === c.id ? ' is-editing' : ''}`}>
                 {!mine && (cont ? <span className="c-sp" /> : <Avatar person={{ email: c.userEmail, displayName: c.userName }} size={28} />)}
                 <div className="c-col">
                   {(!cont || c.editedAt) && (
@@ -411,7 +431,14 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
                     </div>
                   )}
 
-                  {editing === c.id ? editBox(c) : (
+                  {editing === c.id ? (
+                    <>
+                      <div className="bubble is-edit" style={{ width: `min(100%, ${Math.max(editW, 240)}px)` }}>
+                        {editField(c, 'tx')}
+                      </div>
+                      {editActions(c, 'c-edit-under')}
+                    </>
+                  ) : (
                     <div className="bubble" title={cont ? full : undefined} {...pressProps(c)}>
                       <div className="tx"><Text text={c.text} /></div>
                       {/* mouse and keyboard: a small toolbar on hover or focus */}
@@ -433,7 +460,7 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
                     </div>
                   )}
                   {/* a little ♥ count under the bubble once someone has liked it */}
-                  {editing !== c.id && (c.likes || []).length > 0 && (
+                  {(c.likes || []).length > 0 && (
                     <LikeButton c={c} liked={likedByMe(c)} pop={pop === c.id} label={likedBy(c)} onClick={() => toggleLike(c)} className="c-likes" />
                   )}
                 </div>
