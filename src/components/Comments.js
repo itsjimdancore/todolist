@@ -49,7 +49,7 @@ function Text({ text }) {
   return parts.map((p, i) => (i % 2 ? <span key={i} className="c-mention">{p}</span> : <Fragment key={i}>{p}</Fragment>));
 }
 
-export default function Comments({ list, comments, user, isOwner, hint, seen = null, seenReady = true, onSeen }) {
+export default function Comments({ list, comments, user, isOwner, hint, seen = null, seenReady = true, onSeen, focus = null }) {
   const listId = list.id;
   const toast = useToast();
   const [text, setText] = useDraft(`draft:comment:${listId}`);
@@ -62,6 +62,20 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
   const [sheet, setSheet] = useState(null); // the comment whose actions are open as a bottom sheet (touch)
   const [since, setSince] = useState(null); // "last read" as it was when I opened this list; the New line sits after it
   const me = emailOf(user);
+
+  // opened from a comment notification: bring the box into view and put the cursor in it, ready to reply
+  // (after a moment, so the phone's Comments tab has shown and the thread has scrolled down first)
+  useEffect(() => {
+    if (!focus) return undefined;
+    const t = setTimeout(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      el.focus({ preventScroll: true });
+      el.setSelectionRange(el.value.length, el.value.length);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [focus]);
 
   // phone-sized page: Instagram-style list. Measured on the list page, the same box the tabs go by.
   const rootRef = useRef(null);

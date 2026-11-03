@@ -1,7 +1,8 @@
 // Device notifications for Shared To-Do.
 // /api/push sends each one through Firebase Cloud Messaging as data: { title, body, link, tag }.
 // This shows it in the phone's notification bar / the Windows or Mac notification centre,
-// and opens the app on that list when it's clicked.
+// and opens the app on that list when it's clicked (a comment's link has &reply=1: it opens on the comments,
+// ready to reply; its Reply button does the same, and Open opens the list without the reply box).
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
@@ -39,6 +40,9 @@ self.addEventListener('push', (event) => {
       renotify: !!msg.tag && msg.renotify === '1', // only comments alert again
       requireInteraction: false, // goes away by itself
       silent: false,
+      // a comment: a Reply button (where the system shows buttons: Android, Windows, Mac). It opens the list on
+      // its comments with the box ready to type, as does tapping the notification itself.
+      actions: msg.reply === '1' ? [{ action: 'reply', title: 'Reply' }, { action: 'open', title: 'Open' }] : [],
       data: { link: msg.link || '/' },
     });
   })());
@@ -47,6 +51,7 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const link = new URL(event.notification.data?.link || '/', self.location.origin);
+  if (event.action === 'open') link.searchParams.delete('reply'); // "Open": just the list, no reply box
   event.waitUntil((async () => {
     const tabs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     // an open tab of the app: bring it forward and go to the list

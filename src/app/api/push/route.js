@@ -81,12 +81,14 @@ export async function POST(req) {
     if (!allowed) continue;
     const list = wanted;
     const group = notifyGroup(kind);
+    // a new or edited comment can be answered: it gets a Reply button, and opens on the comments with the box ready
+    const canReply = kind === 'comment' || kind === 'comment-edit';
     const res = await a.messaging.sendEachForMulticast({
       tokens: list,
       // repeated ones of the same type on one list replace each other; only comments alert again
       data: {
-        title: msg.title, body: msg.body, link: `${origin}/?list=${doc.listId}`,
-        tag: `list-${doc.listId}-${group}`, renotify: group === 'comments' ? '1' : '',
+        title: msg.title, body: msg.body, link: `${origin}/?list=${doc.listId}${canReply ? '&reply=1' : ''}`,
+        tag: `list-${doc.listId}-${group}`, renotify: group === 'comments' ? '1' : '', reply: canReply ? '1' : '',
       },
       webpush: { headers: { Urgency: 'high', TTL: String(24 * 3600) } },
     }).catch(() => null);

@@ -394,13 +394,6 @@ button.music-next:hover b { color: var(--accent); }
   .side-top { min-height: var(--topbar); padding: 0 12px; gap: 6px; border-bottom: none; }
   .burger { display: grid; }
   .only-desktop { display: none; }
-  /* ‹ back to the page you came from; it takes the brand's place in the top bar */
-  .top-back { display: inline-flex; align-items: center; gap: 2px; min-width: 0; max-width: 60vw; height: 40px; margin-right: auto; padding: 0 10px 0 4px;
-    border: none; border-radius: 10px; background: transparent; color: var(--accent); font-size: 16px; font-weight: 600; -webkit-tap-highlight-color: transparent; }
-  .top-back span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .top-back:active { background: var(--sunk); }
-  .top-back svg { flex: none; }
-  .brand.has-back { display: none; }
   /* the panel drops down full width under the top bar */
   .np { position: fixed; top: calc(var(--topbar) + env(safe-area-inset-top) + 6px); left: 8px; right: 8px; width: auto;
     max-height: calc(100dvh - var(--topbar) - env(safe-area-inset-top) - 20px); }
@@ -455,6 +448,15 @@ button.music-next:hover b { color: var(--accent); }
 .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
 .bar-left { min-width: 0; }
 .bar-left h1 { overflow-wrap: anywhere; }
+/* "‹ My List" above an open list's name */
+.back-link { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; margin: 0 0 6px -6px; padding: 4px 10px 4px 4px;
+  border: none; border-radius: 8px; background: transparent; color: var(--accent); font-size: 13.5px; font-weight: 600; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; }
+.back-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.back-link svg { flex: none; transition: transform .15s ease; }
+.back-link:hover { background: var(--accent-soft); }
+.back-link:hover svg { transform: translateX(-2px); }
+@media (max-width: 860px) { .back-link { min-height: 36px; font-size: 14.5px; } } /* an easy tap target */
 .rename input { font-family: var(--display); font-size: 24px; font-weight: 700; width: min(520px, 100%); }
 .meta { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 2px; }
 .bar-right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -1685,6 +1687,41 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .ntp-row-side { flex: none; display: flex; align-items: center; gap: 8px; }
 .ntp-row-side .nt-acts { box-shadow: none; }
 .btn.small-btn { height: 32px; padding: 0 12px; font-size: 13px; }
+/* Reply to a comment from its notification, like a chat app's notification: quiet Reply / Mark as read actions,
+   then the comment quoted above a rounded box with a round send button; what I sent shows under it with a tick */
+.nt-qr { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; cursor: default; }
+.nt-qr-acts { display: flex; gap: 4px; margin-left: -8px; }
+.nt-qr-a { padding: 5px 8px; border: none; border-radius: 6px; background: none; color: var(--accent); font-size: 13px; font-weight: 700;
+  letter-spacing: .01em; cursor: pointer; }
+.nt-qr-a:hover { background: var(--accent-soft); }
+.nt-qr.compact .nt-qr-a { padding: 4px 8px; font-size: 12.5px; }
+.nt-quote { margin: 0; padding: 6px 10px; border-left: 3px solid var(--accent); border-radius: 4px 8px 8px 4px; background: var(--sunk);
+  display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.nt-quote b { font-size: 12.5px; font-weight: 700; color: var(--accent); }
+.nt-quote span { font-size: 13px; color: var(--muted); line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow-wrap: anywhere; white-space: pre-wrap; }
+.nt-qr-in { display: flex; align-items: flex-end; gap: 8px; }
+.nt-qr-in textarea { flex: 1; min-width: 0; min-height: 40px; max-height: 110px; padding: 10px 16px; border: 1px solid var(--line);
+  border-radius: 20px; background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.4; resize: none; }
+.nt-qr-in textarea:focus { border-color: var(--accent); outline: none; }
+.nt-qr-send { flex: none; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: none; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink); cursor: pointer; transition: transform .12s ease, opacity .15s ease; }
+.nt-qr-send svg { margin-left: 2px; }
+.nt-qr-send:not(:disabled):active { transform: scale(.92); }
+.nt-qr-send:disabled { opacity: .4; cursor: default; }
+.nt-qr-spin { width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: nt-spin .7s linear infinite; }
+@keyframes nt-spin { to { transform: rotate(360deg); } }
+.nt-sent { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+.nt-sent svg { flex: none; margin-top: 3px; color: var(--accent); }
+.nt-sent span { min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.nt-sent b { color: var(--fg); font-weight: 600; }
+.nt-reply-err { font-size: 12.5px; color: var(--danger); }
+.nt-qr.compact .nt-qr-in textarea { min-height: 36px; padding: 8px 14px; font-size: 13.5px; border-radius: 18px; }
+.nt-qr.compact .nt-qr-send { width: 36px; height: 36px; }
+@media (max-width: 860px) { .nt-qr-in textarea, .nt-qr.compact .nt-qr-in textarea { font-size: 16px; } } /* 16px or iPhone zooms in */
+@media (prefers-reduced-motion: reduce) { .nt-qr-spin { animation-duration: 2s; } }
+.btn.nt-stop { color: var(--muted); background: transparent; }
+.btn.nt-stop:hover { color: var(--danger); border-color: var(--danger); }
 
 @media (max-width: 860px) {
   .ntp-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -1720,6 +1757,7 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
   .ntp-notes { max-width: 100%; }
   .ntp-row-side { flex-basis: 100%; padding-left: 50px; }
   .ntp-row-side .btn { margin-right: auto; height: 30px; padding: 0 12px; }
+  .ntp-row-side .btn:has(+ .nt-stop) { margin-right: 0; } /* Open task and Stop reminding side by side */
   .ntp-row-side .nt-acts { border: none; padding: 0; background: none; }
   .ntp-bar { top: 12px; bottom: 12px; }
 }

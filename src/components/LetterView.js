@@ -5,6 +5,7 @@ import { renameList, saveLetterBody, watchComments } from '@/lib/data';
 import { PERMISSIONS, canComment, canWrite, roleLabel } from '@/lib/permissions';
 import { displayName, timeAgo } from '@/lib/people';
 import PeopleStack from './PeopleStack';
+import BackLink from './BackLink';
 import { useToast } from './Toast';
 import Comments from './Comments';
 import { unreadCount, useCommentsSeen } from '@/lib/useCommentsSeen';
@@ -15,7 +16,7 @@ const MAX_BODY = 20000;
 
 // One love letter: the letter on burnt paper, and the comment thread beside it.
 // Works like a list (same access levels), but it's shared with one person at most.
-export default function LetterView({ list, role, user, contacts, onLeave, onDelete, onArchive, menu }) {
+export default function LetterView({ list, role, user, contacts, back, focusComments = null, onLeave, onDelete, onArchive, menu }) {
   const toast = useToast();
   const write = canWrite(role);
   const comment = canComment(role);
@@ -23,6 +24,8 @@ export default function LetterView({ list, role, user, contacts, onLeave, onDele
 
   const [comments, setComments] = useState([]);
   const [pane, setPane] = useState('letter'); // phones show the Letter or Comments, one at a time
+  // opened from a comment notification: show the comments (the phone tab too), with the box ready to reply
+  useEffect(() => { if (focusComments && comment) setPane('comments'); }, [focusComments, comment]);
   const [shareOpen, setShareOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(list.title);
@@ -67,6 +70,7 @@ export default function LetterView({ list, role, user, contacts, onLeave, onDele
     <div className="list-wrap letter-wrap">
       <header className="bar lv-bar">
         <div className="bar-left">
+          <BackLink back={back} />
           {renaming ? (
             <form onSubmit={saveTitle} className="rename">
               <input id="list-title" autoFocus maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} />
@@ -135,6 +139,7 @@ export default function LetterView({ list, role, user, contacts, onLeave, onDele
 
         {comment && (
           <Comments
+            focus={focusComments}
             list={list}
             comments={comments}
             user={user}

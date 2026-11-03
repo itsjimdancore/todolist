@@ -77,7 +77,8 @@ function WorkspaceInner({ user }) {
   const [creating, setCreating] = useState(false); // false | 'list' | 'letter'
   const [showArchived, setShowArchived] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [backFrom, setBackFrom] = useState(null); // the page Back returns to (names the ‹ button on phones)
+  const [backFrom, setBackFrom] = useState(null); // the page Back returns to (names the ‹ back link)
+  const [focusComments, setFocusComments] = useState(null); // { id, at }: open that list on its comments, box ready
   const restored = useRef(false);
   const goingAway = useRef(null); // list I'm deleting or leaving on purpose, so it doesn't count as "access removed"
   const menuBtn = useRef(null);
@@ -204,6 +205,11 @@ function WorkspaceInner({ user }) {
         setView('board');
       }
       setActiveId(pick);
+      // opened from a comment's device notification (its Reply button, or the notification itself):
+      // go straight to the comments with the box ready
+      if (pick && pick === fromUrl && new URLSearchParams(window.location.search).get('reply') === '1') {
+        setFocusComments({ id: pick, at: Date.now() });
+      }
     })();
   }, [lists, user.uid, toast]);
 
@@ -239,6 +245,7 @@ function WorkspaceInner({ user }) {
   useEffect(() => {
     const url = new URL(window.location.href);
     if (activeId) url.searchParams.set('list', activeId);
+    url.searchParams.delete('reply'); // used once, on arrival from a comment's device notification
     if (['board', 'calendar', 'notifications', 'letters', 'music'].includes(view)) url.searchParams.set('view', view);
     else url.searchParams.delete('view');
     const n = nav.current;
@@ -270,10 +277,18 @@ function WorkspaceInner({ user }) {
 
   // the ‹ back button in the phone top bar: one step back if we came from somewhere in the app,
   // otherwise (opened from a link) up to the page this one belongs to
+  // A love letter always goes back to the Love letters page: one step back if that's where I came from,
+  // otherwise straight there (as a new step, so the phone's Back still returns to the letter).
   function goBack() {
-    if ((window.history.state?.depth || 0) > 0) return window.history.back();
+    const depth = window.history.state?.depth || 0;
+    if (active?.kind === 'letter') {
+      if (backFrom === 'letters' && depth > 0) return window.history.back();
+      if (depth === 0) nav.current.popping = true; // opened from a link: replace, so Back from there leaves the app
+      return setView('letters');
+    }
+    if (depth > 0) return window.history.back();
     nav.current.popping = true; // replace, so Back from there leaves the app as expected
-    setView(active?.kind === 'letter' ? 'letters' : 'board');
+    setView('board');
   }
 
   // ---- if the open list disappears (deleted, or my access was removed), move on.
@@ -352,11 +367,12 @@ function WorkspaceInner({ user }) {
   }
 
   const active = lists?.find((l) => l.id === activeId) || null;
-  // phones: the ‹ back button's name (none on My List, the home page). Named after the page Back returns to,
-  // or the page this one belongs to when it was opened straight from a link.
+  // the ‹ back link above an open list's (or letter's) name: named after the page Back returns to,
+  // or the page it belongs to when it was opened straight from a link
   const PAGE_NAMES = { board: 'My List', calendar: 'Calendar', letters: 'Love letters', music: 'Music', notifications: 'Notifications' };
-  const backLabel = view === 'board' ? null
-    : PAGE_NAMES[backFrom] || (backFrom === 'list' ? 'Back' : active?.kind === 'letter' && view === 'list' ? 'Love letters' : 'My List');
+  const backLabel = active?.kind === 'letter' ? 'Love letters' // a letter always goes back to the Love letters page
+    : PAGE_NAMES[backFrom] || (backFrom === 'list' ? 'Back' : 'My List');
+  const back = { label: backLabel, onClick: goBack };
   const dialogList = dialog && lists?.find((l) => l.id === dialog.id);
   // My own drag order once I've set one (new lists go after it), else favourites first; most recently changed breaks ties
   const arrange = (arr) =>
@@ -373,7 +389,7 @@ function WorkspaceInner({ user }) {
   const allTasks = useAllTasks(arranged);
   const dueNow = dueNowCount(taskEntries(openLists, allTasks));
   // Shares + due / overdue reminders, for the bell and the Notifications page
-  const notif = useNotifications({ invites, activity, log, me, lists, tasksByList: allTasks, uid: user.uid, openListId: view === 'list' ? activeId : null });
+  const notif = useNotifications({ invites, activity, log, me, user, lists, tasksByList: allTasks, uid: user.uid, openListId: view === 'list' ? activeId : null });
   const showNotifications = () => { setView('notifications'); setMenuOpen(false); };
   const mine = arranged.filter((l) => l.role === 'owner' && !l.archived);
   const others = arranged.filter((l) => l.role !== 'owner' && !l.archived);
@@ -384,8 +400,13 @@ function WorkspaceInner({ user }) {
   };
   const archived = todoLists.filter((l) => l.archived);
   const pick = (id) => { setActiveId(id); setView('list'); setMenuOpen(false); };
-  // a notification: its list, or (null) the Music page for music ones
-  const openNote = (id) => (id ? pick(id) : (setView('music'), setMenuOpen(false)));
+  // a notification: its list, or (null) the Music page for music ones. A comment one opens the list on its
+  // Comments, with the box ready to type a reply.
+  const openNote = (id, o) => {
+    if (!id) { setView('music'); setMenuOpen(false); return; }
+    pick(id);
+    setFocusComments(o?.comments ? { id, at: Date.now() } : null);
+  };
   const group = { activeId: view === 'list' ? activeId : null, onPick: pick, favorites, actions };
 
   // Everyone I've shared with or who has shared with me: the contacts in the share window
@@ -406,14 +427,7 @@ function WorkspaceInner({ user }) {
             aria-expanded={menuOpen} aria-controls="side-body" aria-label="Open menu">
             <span aria-hidden="true" />
           </button>
-          {/* phones: anywhere but My List, a ‹ back button (named after where you came from) takes the brand's place */}
-          {backLabel && (
-            <button className="top-back only-mobile" type="button" onClick={goBack} aria-label={`Back to ${backLabel}`}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
-              <span>{backLabel}</span>
-            </button>
-          )}
-          <div className={backLabel ? 'brand has-back' : 'brand'}><Emblem size={28} /><span className="brand-name">Shared To-Do</span></div>
+          <div className="brand"><Emblem size={28} /><span className="brand-name">Shared To-Do</span></div>
           <Notifications api={notif} user={user} onOpen={openNote} onViewAll={showNotifications} />
           <button className="side-btn collapse only-desktop" type="button" onClick={toggleRail}
             aria-label={rail ? 'Expand sidebar' : 'Collapse sidebar'} title={rail ? 'Expand sidebar' : 'Collapse sidebar'}>
@@ -522,11 +536,13 @@ function WorkspaceInner({ user }) {
           <Board lists={arranged} tasksByList={allTasks} favorites={favorites} actions={actions} onOpen={pick} onNew={() => setCreating('list')}
             onReorder={onReorder} />
         ) : active?.kind === 'letter' ? (
-          <LetterView key={active.id} list={active} role={active.role} user={user} contacts={contacts}
+          <LetterView key={active.id} list={active} role={active.role} user={user} contacts={contacts} back={back}
+            focusComments={focusComments?.id === active.id ? focusComments.at : null}
             onLeave={actions.leave} onDelete={actions.remove} onArchive={actions.archive}
             menu={<ListMenu list={active} favorite={favorites.has(active.id)} actions={actions} />} />
         ) : active ? (
-          <ListView key={active.id} list={active} role={active.role} user={user} contacts={contacts}
+          <ListView key={active.id} list={active} role={active.role} user={user} contacts={contacts} back={back}
+            focusComments={focusComments?.id === active.id ? focusComments.at : null}
             onLeave={actions.leave} onDelete={actions.remove} onArchive={actions.archive}
             menu={<ListMenu list={active} favorite={favorites.has(active.id)} actions={actions} />} />
         ) : (

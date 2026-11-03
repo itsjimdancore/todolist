@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  MAX_REMINDER_IDS, dismissActivity, dismissInvite, dismissLog, markActivitySeen, markInviteSeen, markLogSeen, saveReminderState, watchReminderState,
+  MAX_REMINDER_IDS, addComment, dismissActivity, dismissInvite, dismissLog, markActivitySeen, markInviteSeen, markLogSeen, saveReminderState, watchReminderState,
 } from '@/lib/data';
 import { addDays, dueLabel, fromKey, timeRange, todayKey } from '@/lib/dates';
 import { friendlyError } from '@/lib/firebase';
-import { roleLabel } from '@/lib/permissions';
+import { canComment, roleLabel } from '@/lib/permissions';
 import { ACT, didText, isComment, notifyCopy, who } from '@/lib/activityText';
 import { Avatar, colorFor, toDate } from '@/lib/people';
 import { useToast } from './Toast';
@@ -13,8 +13,9 @@ import { PushPrompt } from './DevicePush';
 import NotifySettings from './NotifySettings';
 import { UpdateCard, useUpdate } from './UpdateBanner';
 
-const OVERDUE_DAYS = 30; // older overdue tasks stop showing up as reminders
 const PANEL_MAX = 8;
+// "Stop reminding" for one task at one date (saved with the read / cleared reminders)
+const stopKey = (listId, t) => `stop:${listId}/${t.id}:${t.due}`;
 
 // ---------------------------------------------------------------------------
 // Everything that's a notification, newest first:
@@ -23,10 +24,10 @@ const PANEL_MAX = 8;
 //  • activity — someone else did something on a list or letter I'm on: a comment, a task added / done /
 //               changed / deleted, a rename, someone joining or leaving… (also stored in Firestore; see ACT)
 //  • due      — one of my open tasks is due today
-//  • overdue  — an open task is past its date (last 30 days)
+//  • overdue  — an open task is past its date: comes back new every day until "Stop reminding"
 // Reminders are worked out from the tasks; their read / cleared state is saved to my account, so every device agrees.
 // ---------------------------------------------------------------------------
-export function useNotifications({ invites, activity = [], log = [], me = null, lists, tasksByList, uid, openListId = null }) {
+export function useNotifications({ invites, activity = [], log = [], me = null, user = null, lists, tasksByList, uid, openListId = null }) {
   const toast = useToast();
   const [local, setLocal] = useState({ read: [], gone: [] });
   useEffect(() => watchReminderState(uid, (saved) => {
@@ -95,18 +96,27 @@ export function useNotifications({ invites, activity = [], log = [], me = null, 
       });
     }
 
-    const oldest = addDays(today, -OVERDUE_DAYS);
     for (const list of lists || []) {
       if (list.archived) continue;
       for (const t of tasksByList[list.id] || []) {
-        if (t.done || t.archived || !t.due || t.due > today || t.due < oldest) continue;
-        const id = `${t.due === today ? 'due' : 'overdue'}:${list.id}/${t.id}:${t.due}`;
+        if (t.done || t.archived || !t.due || t.due > today) continue;
+        if (t.due === today) {
+          // due today: one reminder, arriving at the start of the day (or at its start time)
+          const id = `due:${list.id}/${t.id}:${t.due}`;
+          if (gone.has(id)) continue;
+          const at = fromKey(t.due);
+          if (t.start) at.setHours(...t.start.split(':').map(Number));
+          out.push({ id, kind: 'due', read: read.has(id), at, listId: list.id, listTitle: list.title, role: list.role, task: t });
+          continue;
+        }
+        // overdue: a fresh, unread reminder every day it stays overdue (removing or reading today's only lasts
+        // for today), until I say "Stop reminding" for this task and date. A new date starts reminders again.
+        const stop = stopKey(list.id, t);
+        if (gone.has(stop)) continue;
+        const id = `overdue:${list.id}/${t.id}:${t.due}@${today}`;
         if (gone.has(id)) continue;
-        // a reminder "arrives" at the start of its day (or at its start time today)
-        const at = fromKey(t.due);
-        if (t.start && t.due === today) at.setHours(...t.start.split(':').map(Number));
         out.push({
-          id, kind: t.due === today ? 'due' : 'overdue', read: read.has(id), at,
+          id, kind: 'overdue', stopId: stop, read: read.has(id), at: fromKey(today),
           listId: list.id, listTitle: list.title, role: list.role, task: t,
         });
       }
@@ -147,6 +157,45 @@ export function useNotifications({ invites, activity = [], log = [], me = null, 
     else if (n.logId) dismissLog(uid, n.logId).catch(fail);
     else saveLocal((p) => ({ read: p.read.filter((x) => x !== n.id), gone: [...new Set([...p.gone, n.id])] }));
   };
+  // a comment notification: can I answer it from here? (someone else's comment, on a list I can still comment on)
+  const canReply = (n) => !!user && !n.self && !n.gone && (n.kind === 'comment' || n.kind === 'comment-edit')
+    && canComment((lists || []).find((l) => l.id === n.listId)?.role);
+  // ...and answer it: posts a comment on that list (everyone on it is told, as usual) and marks this one read
+  const reply = async (n, text) => {
+    const list = (lists || []).find((l) => l.id === n.listId);
+    if (!list || !canComment(list.role)) throw new Error("You can't comment on this list any more.");
+    await addComment(list, user, text);
+    setRead(n, true);
+    toast(`Reply sent to “${list.title}”`);
+  };
+
+  // overdue: stop the daily reminder for this task (until its date changes), with Undo
+  const stopReminding = (n) => {
+    if (!n.stopId) return;
+    saveLocal((p) => ({ read: p.read.filter((x) => x !== n.id), gone: [...new Set([...p.gone, n.stopId])] }));
+    toast({
+      title: 'Reminders stopped',
+      description: `“${n.task.text}” won't be reminded again. Changing its date starts them again.`,
+      action: { label: 'Undo', onClick: () => saveLocal((p) => ({ ...p, gone: p.gone.filter((x) => x !== n.stopId) })) },
+    });
+  };
+
+  // opening the app with overdue tasks: say so once a day on this device, as well as in the bell
+  const overdueNow = items.filter((n) => n.kind === 'overdue' && !n.read).length;
+  useEffect(() => {
+    if (!lists || !overdueNow) return;
+    const key = `overdue-nudge:${uid}`;
+    try {
+      if (localStorage.getItem(key) === today) return;
+      localStorage.setItem(key, today);
+    } catch {}
+    toast({
+      title: `${overdueNow} task${overdueNow > 1 ? 's are' : ' is'} overdue`,
+      description: 'Open the bell to see them, or stop the reminder for any of them.',
+      kind: 'info',
+    });
+  }, [lists, overdueNow, uid, today, toast]);
+
   const markAllRead = () => {
     const unread = items.filter((n) => !n.read);
     const writes = [
@@ -167,7 +216,7 @@ export function useNotifications({ invites, activity = [], log = [], me = null, 
     });
   };
 
-  return { items, unread: items.filter((n) => !n.read).length, setRead, dismiss, markAllRead };
+  return { items, unread: items.filter((n) => !n.read).length, setRead, dismiss, stopReminding, canReply, reply, markAllRead };
 }
 
 // ---------------------------------------------------------------------------
@@ -263,10 +312,95 @@ function groupByDay(items) {
   return groups;
 }
 
+// Replying to a comment from its notification, the way a chat app's notification does it:
+//  • under the notification, two quiet actions: "Reply" and "Mark as read"
+//  • Reply quotes the comment (who wrote it, and what), with a rounded box under it and a round send button
+//  • Enter sends (Shift+Enter is a new line); Esc, or clicking away with nothing typed, puts it back
+//  • once sent, "You: …" shows under the quote with a tick, like a sent message
+// Clicks and keys stay inside: the row itself opens the list.
+function QuickReply({ n, api, compact }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [sent, setSent] = useState(null); // what I replied, shown under the quote
+  if (!api.canReply(n)) return null;
+  const name = n.from.displayName || n.from.email;
+  const stop = (e) => e.stopPropagation();
+  const grow = (el) => { if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 110)}px`; } };
+  const close = () => { setOpen(false); setText(''); setErr(''); };
+
+  async function send(e) {
+    e?.preventDefault();
+    const t = text.trim();
+    if (!t || busy) return;
+    setBusy(true); setErr('');
+    try {
+      await api.reply(n, t);
+      setSent(t); setText(''); setOpen(false);
+    } catch (x) {
+      setErr(friendlyError(x));
+    }
+    setBusy(false);
+  }
+
+  const cls = compact ? ' compact' : '';
+  const replied = sent && (
+    <p className={`nt-sent${cls}`}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 12.5 6.5 17 15 8M9.5 17 18 8.5M14 17l8-8.5" /></svg>
+      <span><b>You:</b> {sent}</span>
+    </p>
+  );
+
+  if (!open) {
+    return (
+      <div className={`nt-qr${cls}`} onClick={stop} onKeyDown={stop}>
+        {replied}
+        <div className="nt-qr-acts">
+          <button type="button" className="nt-qr-a" onClick={() => setOpen(true)}>{sent ? 'Reply again' : 'Reply'}</button>
+          {!n.read && <button type="button" className="nt-qr-a" onClick={() => api.setRead(n, true)}>Mark as read</button>}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <form className={`nt-qr open${cls}`} onSubmit={send} onClick={stop} onMouseDown={stop} onKeyDown={stop}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget) && !text.trim() && !busy) close(); }}>
+      {/* the comment being answered */}
+      <blockquote className="nt-quote">
+        <b>{name}</b>
+        <span>{n.text || 'Comment'}</span>
+      </blockquote>
+      {replied}
+      <div className="nt-qr-in">
+        <textarea autoFocus rows={1} maxLength={2000} value={text} placeholder="Reply" aria-label={`Reply to ${name}`}
+          enterKeyHint="send" ref={grow}
+          onChange={(e) => { setText(e.target.value); grow(e.target); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) send(e);
+            if (e.key === 'Escape') { e.stopPropagation(); close(); }
+          }} />
+        <button type="submit" className="nt-qr-send" disabled={!text.trim() || busy} aria-label={busy ? 'Sending' : 'Send reply'} title="Send">
+          {busy ? <span className="nt-qr-spin" aria-hidden="true" /> : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4 21.9 12 3.4 3.6 3.3 10l13 2-13 2z" /></svg>
+          )}
+        </button>
+      </div>
+      {err && <span className="nt-reply-err" role="alert">{err}</span>}
+    </form>
+  );
+}
+
 // small icon buttons that appear on a row
 function RowActions({ n, api }) {
   return (
     <div className="nt-acts">
+      {n.stopId && (
+        <button type="button" className="nt-act" onClick={(e) => { e.stopPropagation(); api.stopReminding(n); }}
+          title="Stop reminding me" aria-label="Stop reminding me about this task">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8.7 3.6A6 6 0 0 1 18 8c0 3.2.8 5.4 1.6 6.8M17 17H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0M2 2l20 20" /></svg>
+        </button>
+      )}
       <button type="button" className="nt-act" onClick={(e) => { e.stopPropagation(); api.setRead(n, !n.read); }}
         title={n.read ? 'Mark as unread' : 'Mark as read'} aria-label={n.read ? 'Mark as unread' : 'Mark as read'}>
         {n.read ? (
@@ -307,7 +441,7 @@ export default function Notifications({ api, user, onOpen, onViewAll }) {
     };
   }, [open]);
 
-  const go = (n) => { api.setRead(n, true); if (n.music) onOpen(null); else if (!n.gone) onOpen(n.listId); setOpen(false); };
+  const go = (n) => { api.setRead(n, true); if (n.music) onOpen(null); else if (!n.gone) onOpen(n.listId, { comments: isComment(n) }); setOpen(false); };
 
   return (
     <div className="notif" ref={box}>
@@ -356,6 +490,7 @@ export default function Notifications({ api, user, onOpen, onViewAll }) {
                           <span className="nt-dot" aria-hidden="true">·</span>
                           <time dateTime={n.at.toISOString()} title={fullTime(n.at)}>{ago(n.at)}</time>
                         </p>
+                        <QuickReply n={n} api={api} compact />
                       </div>
                       {!n.read && <span className="np-unread" aria-label="Unread" />}
                       <RowActions n={n} api={api} />
@@ -423,7 +558,7 @@ export function NotificationsPage({ api, user, onOpen }) {
     { label: 'Due today', value: items.filter((n) => n.kind === 'due').length, tone: 'warn' },
     { label: 'Overdue', value: items.filter((n) => n.kind === 'overdue').length, tone: 'danger' },
   ];
-  const go = (n) => { api.setRead(n, true); if (n.music) onOpen(null); else if (!n.gone) onOpen(n.listId); };
+  const go = (n) => { api.setRead(n, true); if (n.music) onOpen(null); else if (!n.gone) onOpen(n.listId, { comments: isComment(n) }); };
 
   return (
     <div className="ntp">
@@ -489,9 +624,11 @@ export function NotificationsPage({ api, user, onOpen }) {
                       </div>
                       <p className="ntp-row-t"><Headline n={n} /></p>
                       <Details n={n} />
+                      <QuickReply n={n} api={api} />
                     </div>
                     <div className="ntp-row-side">
                       {ctaOf(n) && <button type="button" className="btn small-btn" onClick={() => go(n)}>{ctaOf(n)}</button>}
+                      {n.stopId && <button type="button" className="btn small-btn nt-stop" onClick={() => api.stopReminding(n)}>Stop reminding</button>}
                       <RowActions n={n} api={api} />
                     </div>
                   </li>

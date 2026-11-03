@@ -12,7 +12,8 @@ import {
 } from '@/lib/data';
 import { PERMISSIONS, canComment, canWrite, roleLabel } from '@/lib/permissions';
 import PeopleStack from './PeopleStack';
-import { dueLabel } from '@/lib/dates';
+import BackLink from './BackLink';
+import { byDue, dueLabel } from '@/lib/dates';
 import { useToast } from './Toast';
 import AddTask from './AddTask';
 import TaskItem from './TaskItem';
@@ -23,7 +24,7 @@ import Loading from './Loading';
 import TaskDetails from './TaskDetails';
 import { inDropdown } from './Select';
 
-export default function ListView({ list, role, user, contacts, onLeave, onDelete, onArchive, menu }) {
+export default function ListView({ list, role, user, contacts, back, focusComments = null, onLeave, onDelete, onArchive, menu }) {
   const toast = useToast();
   const write = canWrite(role);
   const comment = canComment(role);
@@ -33,6 +34,8 @@ export default function ListView({ list, role, user, contacts, onLeave, onDelete
   const [comments, setComments] = useState([]);
   const [showArchived, setShowArchived] = useState(false);
   const [pane, setPane] = useState('tasks'); // phones show Tasks or Comments, one at a time
+  // opened from a comment notification: show the comments (the phone tab too), with the box ready to reply
+  useEffect(() => { if (focusComments && comment) setPane('comments'); }, [focusComments, comment]);
   const [shareOpen, setShareOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(list.title);
@@ -83,7 +86,8 @@ export default function ListView({ list, role, user, contacts, onLeave, onDelete
   }
 
   const ownerPerson = { email: list.ownerEmail, displayName: list.ownerName };
-  const active = (tasks || []).filter((t) => !t.archived);
+  // sorted by due date (see byDue): setting or changing a date moves the task into place
+  const active = (tasks || []).filter((t) => !t.archived).sort(byDue);
   const archived = (tasks || []).filter((t) => t.archived);
   const someoneCanComment = members.some((m) => canComment(m.permission));
   const named = Object.fromEntries((contacts || []).map((c) => [c.email, c]));
@@ -137,6 +141,7 @@ export default function ListView({ list, role, user, contacts, onLeave, onDelete
     <div className="list-wrap">
       <header className="bar lv-bar">
         <div className="bar-left">
+          <BackLink back={back} />
           {renaming ? (
             <form onSubmit={saveTitle} className="rename">
               <input id="list-title" autoFocus maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} onBlur={saveTitle} />
@@ -227,6 +232,7 @@ export default function ListView({ list, role, user, contacts, onLeave, onDelete
 
         {comment && (
           <Comments
+            focus={focusComments}
             list={list}
             comments={comments}
             user={user}

@@ -47,6 +47,17 @@ export function dueLabel(key) {
 
 export const isOverdue = (task) => !!task.due && !task.done && task.due < todayKey();
 
+// How a list orders its tasks, so setting a date moves the task into place by itself:
+// open tasks with a date first, soonest first (so overdue ones are on top); on the same day, all-day ones and
+// then by start time; then open tasks with no date; finished tasks last. Ties keep their order (newest first).
+export function byDue(a, b) {
+  if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+  if (!a.due !== !b.due) return a.due ? -1 : 1;
+  if (a.due && b.due && a.due !== b.due) return a.due < b.due ? -1 : 1;
+  if ((a.start || '') !== (b.start || '')) return (a.start || '') < (b.start || '') ? -1 : 1;
+  return 0;
+}
+
 // Every day shown in a month grid: Monday of the first week → Sunday of the last
 export function monthDays(year, month) {
   const first = new Date(year, month, 1);
