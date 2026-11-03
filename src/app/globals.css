@@ -2396,21 +2396,20 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
   .chat-start-card input { font-size: 16px; }
 }
 
-/* ---------- Chat list (WhatsApp-style): beside the conversation on computers, its own screen on phones ---------- */
-.chat-split { flex-direction: row !important; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-.chat-split > .chat-conv { flex: 1; min-width: 0; border: none; border-radius: 0; max-width: none; border-left: 1px solid var(--line); }
-.chat-list { flex: none; width: 340px; display: flex; flex-direction: column; min-height: 0; background: #111b21; }
-.chat-list-h { display: flex; align-items: center; gap: 8px; padding: 14px 16px 10px; }
-.chat-list-h h1 { margin: 0; font-size: 22px; }
-.chat-list-h .back-link { margin: 0 2px 0 -6px; }
+/* ---------- Chat list (WhatsApp-style): its own page; a chat opens the conversation as the next page ---------- */
+.chat-shell { flex-direction: column; }
+.chat-shell > .chat-conv { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chat-list { flex: 1; min-height: 0; width: 100%; max-width: 760px; align-self: center; display: flex; flex-direction: column;
+  border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #111b21; }
+.chat-list-h { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px 16px 10px; }
+.chat-list-h h1 { margin: 0; font-size: 24px; }
+.chat-list-h .back-link { margin: 0 0 0 -6px; }
 .chat-rows { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
 .chat-item { width: 100%; display: flex; align-items: center; gap: 14px; padding: 10px 16px; border: none; background: none; color: inherit;
   text-align: left; cursor: pointer; }
-.chat-item:hover { background: #202c33; }
-.chat-item.on { background: #2a3942; }
+.chat-item:hover, .chat-item:focus-visible { background: #202c33; }
 .chat-item .av { flex: none; }
-.chat-item-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 4px 0;
-  border-bottom: 1px solid rgb(134 150 160 / .15); }
+.chat-item-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 4px 0; }
 .chat-item-name { font-size: 16.5px; color: #e9edef; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-item-last { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 14px; color: #8696a0; }
 .chat-item-last.typing { color: #00a884; font-weight: 600; }
@@ -2418,21 +2417,18 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 .chat-item-last .cm-ticks { flex: none; color: #8696a0; }
 .chat-item-last .cm-ticks.read { color: #53bdeb; }
 /* the right side: time on top, the unread count under it */
-.chat-item-side { flex: none; align-self: stretch; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 6px;
-  padding: 4px 0; border-bottom: 1px solid rgb(134 150 160 / .15); margin-left: -14px; padding-left: 14px; }
+.chat-item-side { flex: none; align-self: stretch; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 6px; padding: 4px 0; }
 .chat-item-time { font-size: 12px; color: #8696a0; white-space: nowrap; }
 .chat-item-time.unread { color: #00a884; font-weight: 600; }
 .chat-item-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center; background: #00a884;
   color: #111b21; font-size: 12px; font-weight: 700; }
 .chat-item-count.none { visibility: hidden; }
+.chat-rows li + li .chat-item-b, .chat-rows li + li .chat-item-side { border-top: 1px solid rgb(134 150 160 / .15); }
 .chat-list-note { margin: auto 16px 14px; padding-top: 14px; font-size: 12px; color: #8696a0; text-align: center; }
-.chat-back-m { display: none; }
 
 @media (max-width: 860px) {
-  .main > .chat-split { margin: -16px 0 0; border: none; border-radius: 0; }
-  .chat-list { width: 100%; }
-  .chat-split > .chat-conv { border-left: none; }
-  .chat-split.conv-open .chat-list { display: none; }
-  .chat-back-m { display: inline-flex; }
+  .main > .chat-shell { margin: -16px 0 0; }
+  .chat-list { max-width: none; border: none; border-radius: 0; }
+  .chat-shell > .chat-conv { border: none; border-radius: 0; }
   .chat-item { padding: 10px 14px; }
 }

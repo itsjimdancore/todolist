@@ -62,30 +62,36 @@ function Linked({ text }) {
   return out;
 }
 
-// The Chat page: start the private chat, or the chat list and the conversation (side by side on computers;
-// on phones the list first, tap the chat to open it, ‹ goes back to the list)
+// The Chat page: start the private chat, or the list of chats ("Chats"). Clicking a chat opens the conversation
+// as its own page; ‹ (or the phone's / browser's Back) returns to the list.
 export default function Chat({ api, user, contacts, back }) {
   // opened from a chat message's notification: straight into the conversation
   const [inConv, setInConv] = useState(() => new URLSearchParams(window.location.search).get('chat') === '1');
   const [person, setPerson] = useState(null);
   const { other } = api;
   useEffect(() => (other ? watchPerson(other, setPerson) : undefined), [other]);
-  // computers show the list and the conversation side by side; phones one at a time
-  const [wide, setWide] = useState(true);
+  // the conversation is a step in the history, so Back returns to the list
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 861px)');
-    const on = () => setWide(mq.matches);
-    on();
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
+    const onPop = () => setInConv(!!window.history.state?.chatConv);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
   }, []);
+  const openConv = () => {
+    const st = window.history.state || {};
+    window.history.pushState({ ...st, depth: (st.depth || 0) + 1, chatConv: true }, '', window.location.href);
+    setInConv(true);
+  };
+  const closeConv = () => {
+    if (window.history.state?.chatConv) window.history.back();
+    else setInConv(false);
+  };
   if (api.chat === undefined) return <div className="chat-page"><Loading variant="page" hint="Opening your chat" /></div>;
   if (!api.chat) return <StartChat user={user} contacts={contacts} back={back} />;
   return (
-    <div className={inConv ? 'chat-page chat-split conv-open' : 'chat-page chat-split'}>
-      <ChatList api={api} user={user} person={person} back={back} active={inConv || wide} onOpen={() => setInConv(true)} />
-      {/* only on screen counts as read, so on phones it's mounted while open */}
-      {(wide || inConv) && <Conversation api={api} user={user} person={person} back={{ label: 'Chats', onClick: () => setInConv(false) }} />}
+    <div className="chat-page chat-shell">
+      {inConv
+        ? <Conversation api={api} user={user} person={person} back={{ label: 'Chats', onClick: closeConv }} />
+        : <ChatList api={api} user={user} person={person} back={back} onOpen={openConv} />}
     </div>
   );
 }
@@ -101,7 +107,7 @@ function listTime(ts) {
 }
 
 // The list of chats: [avatar] [name / latest message with ticks] [time / unread count]
-function ChatList({ api, user, person, back, active, onOpen }) {
+function ChatList({ api, user, person, back, onOpen }) {
   const { chat, other, me, unread } = api;
   const [, tick] = useState(0);
   useEffect(() => {
@@ -122,7 +128,7 @@ function ChatList({ api, user, person, back, active, onOpen }) {
       </header>
       <ul className="chat-rows">
         <li>
-          <button type="button" className={active ? 'chat-item on' : 'chat-item'} onClick={onOpen}
+          <button type="button" className="chat-item" onClick={onOpen}
             aria-label={`Chat with ${name}${unread ? `, ${unread} unread` : ''}`}>
             <Avatar person={{ email: other, displayName: name, photoURL: person?.photoURL || '' }} size={48} title={false} />
             <span className="chat-item-b">
@@ -344,7 +350,7 @@ function Conversation({ api, user, person, back }) {
   return (
     <div className="chat-conv">
       <header className="chat-h">
-        <span className="chat-back-m"><BackLink back={back} /></span>
+        <BackLink back={back} />
         <PeopleStack people={[{ email: other, displayName: name }]} me={user} />
         <div className="chat-h-b">
           <b>{name}</b>
