@@ -121,8 +121,9 @@ function Conversation({ api, user, back }) {
     return () => clearInterval(t);
   }, []);
   const typing = ms(chat.typing?.[other]) > Date.now() - TYPING_MS;
+  // ✓✓ blue once they've read up to a message, ✓✓ grey once it reached their device (app open, or the notification)
   const theirRead = ms(chat.readAt?.[other]);
-  const theirSeen = Math.max(theirRead, ms(person?.lastSeen));
+  const theirDelivered = Math.max(theirRead, ms(chat.deliveredAt?.[other]));
 
   // composer
   const [text, setText] = useState('');
@@ -231,8 +232,8 @@ function Conversation({ api, user, back }) {
     const el = document.getElementById(`m-${id}`);
     if (!el) return toast('That message is further back. Load earlier messages to see it.', 'info');
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.add('flash');
-    setTimeout(() => el.classList.remove('flash'), 1200);
+    el.classList.add('cm-flash');
+    setTimeout(() => el.classList.remove('cm-flash'), 1200);
   };
 
   // close the message menu on click elsewhere / Esc
@@ -289,10 +290,10 @@ function Conversation({ api, user, back }) {
             <div key={r.key} className="chat-day"><span>{r.day}</span></div>
           ) : (
             <Bubble key={r.key} m={r.m} first={r.first} mine={r.m.from === me} name={name} me={me}
-              read={theirRead >= ms(r.m.createdAt)} delivered={theirSeen >= ms(r.m.createdAt) || seenLabel(person) === 'online'}
+              tick={tickState(r.m, theirDelivered, theirRead)}
               onMenu={(x, y) => setMenu({ id: r.m.id, x, y })} onReply={() => startReply(r.m)} onJump={jump} />
           )))}
-          {typing && <div className="msg them first"><div className="bubble typing-dots" aria-label={`${name} is typing`}><i /><i /><i /></div></div>}
+          {typing && <div className="cm cm-theirs cm-first"><div className="cm-b cm-typing" aria-label={`${name} is typing`}><i /><i /><i /></div></div>}
         </div>
       </div>
 
@@ -348,7 +349,7 @@ function Conversation({ api, user, back }) {
 }
 
 // One message. Long-press (phones) or the ⌄ (computers) for Reply / Copy / Edit / Delete; swipe right to reply.
-function Bubble({ m, first, mine, name, me, read, delivered, onMenu, onReply, onJump }) {
+function Bubble({ m, first, mine, name, me, tick, onMenu, onReply, onJump }) {
   const d = toDate(m.createdAt);
   const press = useRef(null);
   const [dx, setDx] = useState(0);
@@ -376,29 +377,29 @@ function Bubble({ m, first, mine, name, me, read, delivered, onMenu, onReply, on
   };
 
   return (
-    <div id={`m-${m.id}`} className={['msg', mine ? 'me' : 'them', first && 'first'].filter(Boolean).join(' ')}>
-      <div className={['bubble', big && 'big', m.deleted && 'deleted'].filter(Boolean).join(' ')}
+    <div id={`m-${m.id}`} className={['cm', mine ? 'cm-mine' : 'cm-theirs', first && 'cm-first'].filter(Boolean).join(' ')}>
+      <div className={['cm-b', big && 'cm-big', m.deleted && 'cm-deleted'].filter(Boolean).join(' ')}
         style={dx ? { transform: `translateX(${dx}px)` } : undefined}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
         onContextMenu={(e) => { e.preventDefault(); onMenu(e.clientX, e.clientY); }}>
         {m.reply && !m.deleted && (
-          <button type="button" className="quote" onClick={() => onJump(m.reply.id)}>
+          <button type="button" className="cm-quote" onClick={() => onJump(m.reply.id)}>
             <b>{m.reply.from === me ? 'You' : name}</b>
             <span>{m.reply.text}</span>
           </button>
         )}
         {m.deleted ? (
-          <span className="msg-t">🚫 {mine ? 'You deleted this message' : 'This message was deleted'}</span>
+          <span className="cm-t">🚫 {mine ? 'You deleted this message' : 'This message was deleted'}</span>
         ) : (
-          <span className="msg-t"><Linked text={m.text} /></span>
+          <span className="cm-t"><Linked text={m.text} /></span>
         )}
-        <span className="msg-meta">
+        <span className="cm-meta">
           {m.editedAt && !m.deleted && <em>edited</em>}
           {clock(d)}
-          {mine && !m.deleted && <Ticks read={read} delivered={delivered} />}
+          {mine && !m.deleted && <Ticks state={tick} />}
         </span>
         {!m.deleted && (
-          <button type="button" className="msg-more" aria-label="Message options"
+          <button type="button" className="cm-more" aria-label="Message options"
             onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); onMenu(r.left, r.bottom + 4); }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
           </button>
@@ -408,15 +409,29 @@ function Bubble({ m, first, mine, name, me, read, delivered, onMenu, onReply, on
   );
 }
 
-// ✓ sent · ✓✓ delivered · blue ✓✓ read
-function Ticks({ read, delivered }) {
-  const label = read ? 'Read' : delivered ? 'Delivered' : 'Sent';
+// Like WhatsApp: 🕓 sending (not on the server yet) · ✓ sent · ✓✓ delivered (grey) · ✓✓ read (blue)
+export function tickState(m, deliveredAt, readAt) {
+  if (m.pending) return 'pending';
+  const at = ms(m.createdAt);
+  if (readAt >= at) return 'read';
+  if (deliveredAt >= at) return 'delivered';
+  return 'sent';
+}
+const TICK_LABEL = { pending: 'Sending', sent: 'Sent', delivered: 'Delivered', read: 'Read' };
+
+function Ticks({ state }) {
   return (
-    <span className={read ? 'ticks read' : 'ticks'} title={label} aria-label={label}>
-      <svg width="16" height="11" viewBox="0 0 16 11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M1 6l3 3 6-7.5" />
-        {(read || delivered) && <path d="M6.5 8.5l.5.5 6-7.5" />}
-      </svg>
+    <span className={`cm-ticks ${state}`} title={TICK_LABEL[state]} aria-label={TICK_LABEL[state]}>
+      {state === 'pending' ? (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+        </svg>
+      ) : (
+        <svg width="17" height="11" viewBox="0 0 17 11" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M1 6l3 3 6.5-8" />
+          {state !== 'sent' && <path d="M7 8.6l.9.9 6.5-8" />}
+        </svg>
+      )}
     </span>
   );
 }

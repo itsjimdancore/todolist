@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { emailOf, watchMessages, watchMyChats } from './data';
+import { useEffect, useRef, useState } from 'react';
+import { emailOf, markChatDelivered, watchMessages, watchMyChats } from './data';
 import { toDate } from './people';
 
 const PAGE = 50; // messages loaded at a time; "Load earlier messages" adds another page
@@ -31,6 +31,17 @@ export function useChat(user) {
   }, [chatId, n]);
 
   const other = chat ? chat.members.find((e) => e !== email) || null : null;
+
+  // Their newest message reached me (the app is open, on any page): tell them, so they see grey double ticks.
+  // Once per newer message; reading the chat (blue ticks) also counts.
+  const theirLast = chat?.last && chat.last.from !== email ? ms(chat.last.at) : 0;
+  const deliveredMine = Math.max(ms(chat?.deliveredAt?.[email]), ms(chat?.readAt?.[email]));
+  const marked = useRef(0);
+  useEffect(() => {
+    if (!chatId || !theirLast || theirLast <= deliveredMine || marked.current >= theirLast) return;
+    marked.current = theirLast;
+    markChatDelivered(chatId, user).catch(() => { marked.current = 0; });
+  }, [chatId, theirLast, deliveredMine, user]);
   const readMine = ms(chat?.readAt?.[email]);
   const unread = chat && messages
     ? messages.filter((m) => m.from !== email && !m.deleted && ms(m.createdAt) > readMine).length

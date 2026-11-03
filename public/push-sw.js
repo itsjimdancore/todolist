@@ -27,6 +27,13 @@ self.addEventListener('push', (event) => {
   }
   if (!msg.title) return;
 
+  // a chat message reached this device: "delivered" (the sender sees grey double ticks), like WhatsApp
+  if (msg.tag && msg.tag.startsWith('chat-') && msg.replyToken) {
+    event.waitUntil(fetch((msg.replyUrl || '/api/reply').replace('/api/reply', '/api/delivered'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: msg.replyToken }),
+    }).catch(() => {}));
+  }
+
   event.waitUntil((async () => {
     // Someone looking at the app right now already sees it there (a pop-up in the app), so no double alert,
     // unless they turned on "Also while I'm using the app" in Notification settings

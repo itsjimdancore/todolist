@@ -341,15 +341,16 @@ export async function startChat(user, otherEmail) {
   const id = chatIdFor(me, otherEmail);
   await setDoc(chatRef(id), {
     members: id.split('|'), names: { [me]: nameOf(user).slice(0, 120) },
-    createdBy: user.uid, createdAt: serverTimestamp(), readAt: {}, typing: {},
+    createdBy: user.uid, createdAt: serverTimestamp(), readAt: {}, deliveredAt: {}, typing: {},
   });
   return id;
 }
 
-// the newest n messages, oldest first (live)
+// the newest n messages, oldest first (live). pending: not saved on the server yet (the clock instead of a tick)
 export function watchMessages(chatId, n, onData, onError) {
-  return onSnapshot(query(msgsCol(chatId), orderBy('createdAt', 'desc'), limit(n)),
-    (s) => onData(withId(s).reverse(), s.size), onError);
+  return onSnapshot(query(msgsCol(chatId), orderBy('createdAt', 'desc'), limit(n)), { includeMetadataChanges: true },
+    (s) => onData(s.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }), pending: d.metadata.hasPendingWrites })).reverse(), s.size),
+    onError);
 }
 
 // reply: { id, text, from } of the message being answered
@@ -361,6 +362,7 @@ export async function sendMessage(chatId, user, text, reply = null) {
   b.update(chatRef(chatId),
     'last', { text: text.slice(0, 200), from: me, at: serverTimestamp() },
     new FieldPath('readAt', me), serverTimestamp(),
+    new FieldPath('deliveredAt', me), serverTimestamp(),
     new FieldPath('typing', me), deleteField(),
     new FieldPath('names', me), nameOf(user).slice(0, 120));
   await b.commit();
@@ -388,8 +390,12 @@ export const editMessage = (chatId, id, text) =>
 export const deleteMessage = (chatId, id) =>
   updateDoc(doc(msgsCol(chatId), id), { text: '', deleted: true, reply: deleteField(), editedAt: deleteField() });
 
+// read (blue ticks) also counts as delivered
 export const markChatRead = (chatId, user) =>
-  updateDoc(chatRef(chatId), new FieldPath('readAt', emailOf(user)), serverTimestamp());
+  updateDoc(chatRef(chatId), new FieldPath('readAt', emailOf(user)), serverTimestamp(), new FieldPath('deliveredAt', emailOf(user)), serverTimestamp());
+// their messages reached me (grey double ticks for them): the app is open, on any page
+export const markChatDelivered = (chatId, user) =>
+  updateDoc(chatRef(chatId), new FieldPath('deliveredAt', emailOf(user)), serverTimestamp());
 // "typing…": on while typing (refreshed every few seconds), off when sent or cleared
 export const setTyping = (chatId, user, on) =>
   updateDoc(chatRef(chatId), new FieldPath('typing', emailOf(user)), on ? serverTimestamp() : deleteField());

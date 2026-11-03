@@ -385,7 +385,7 @@ service cloud.firestore {
         return request.resource.data.get(field, {}).diff(resource.data.get(field, {})).affectedKeys().hasOnly([myEmail()]);
       }
       function validNewChat(d) {
-        return d.keys().hasOnly(['members', 'names', 'createdBy', 'createdAt', 'readAt', 'typing'])
+        return d.keys().hasOnly(['members', 'names', 'createdBy', 'createdAt', 'readAt', 'deliveredAt', 'typing'])
           && d.members is list && d.members.size() == 2
           && d.members[0] is string && d.members[1] is string
           && d.members[0] < d.members[1]
@@ -395,7 +395,7 @@ service cloud.firestore {
           && chatId == d.members[0] + '|' + d.members[1]
           && d.createdBy == request.auth.uid && d.createdAt == request.time
           && d.names is map && d.names.keys().hasOnly([myEmail()])
-          && d.get('readAt', {}) is map && d.get('typing', {}) is map;
+          && d.get('readAt', {}) is map && d.get('deliveredAt', {}) is map && d.get('typing', {}) is map;
       }
       function validLast(l) {
         return l is map && l.keys().hasOnly(['text', 'from', 'at'])
@@ -404,8 +404,8 @@ service cloud.firestore {
       allow read: if isMember(resource.data);
       allow create: if validNewChat(request.resource.data);
       allow update: if isMember(resource.data)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last', 'readAt', 'typing', 'names'])
-        && onlyMine('readAt') && onlyMine('typing') && onlyMine('names')
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last', 'readAt', 'deliveredAt', 'typing', 'names'])
+        && onlyMine('readAt') && onlyMine('deliveredAt') && onlyMine('typing') && onlyMine('names')
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['last']) || validLast(request.resource.data.last));
 
       match /messages/{messageId} {
