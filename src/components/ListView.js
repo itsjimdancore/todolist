@@ -11,7 +11,7 @@ import {
   watchTasks,
 } from '@/lib/data';
 import { PERMISSIONS, canComment, canWrite, roleLabel } from '@/lib/permissions';
-import { Avatar } from '@/lib/people';
+import PeopleStack from './PeopleStack';
 import { dueLabel } from '@/lib/dates';
 import { useToast } from './Toast';
 import AddTask from './AddTask';
@@ -86,7 +86,8 @@ export default function ListView({ list, role, user, contacts, onLeave, onDelete
   const active = (tasks || []).filter((t) => !t.archived);
   const archived = (tasks || []).filter((t) => t.archived);
   const someoneCanComment = members.some((m) => canComment(m.permission));
-  const everyone = [ownerPerson, ...members.map((m) => ({ email: m.email }))];
+  const named = Object.fromEntries((contacts || []).map((c) => [c.email, c]));
+  const everyone = [ownerPerson, ...members.map((m) => ({ email: m.email, displayName: named[m.email]?.displayName }))];
 
   const taskProps = (t) => ({
     task: t,
@@ -150,10 +151,7 @@ export default function ListView({ list, role, user, contacts, onLeave, onDelete
           </div>
         </div>
         <div className="bar-right">
-          <div className="avatars" title={`${everyone.length} ${everyone.length === 1 ? 'person' : 'people'} with access`}>
-            {everyone.slice(0, 6).map((p) => <Avatar key={p.email} person={p} size={30} />)}
-            {everyone.length > 6 && <span className="av av-more">+{everyone.length - 6}</span>}
-          </div>
+          <PeopleStack people={everyone} me={user} />
           {isOwner ? (
             <>
               {/* on phones Rename lives in the ⋮ menu ("Edit name") */}

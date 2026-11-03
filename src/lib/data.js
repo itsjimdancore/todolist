@@ -39,6 +39,24 @@ export async function saveProfile(user) {
   );
 }
 
+// ---------- people/{email}: my name, photo and when I was last here, for the people I share lists with ----------
+// (users/{uid} stays private; this small card is all anyone else can see, and only if they know my email)
+export function savePresence(user) {
+  const email = emailOf(user);
+  if (!email) return Promise.resolve();
+  return setDoc(doc(db(), 'people', email), {
+    email,
+    displayName: nameOf(user).slice(0, 120),
+    photoURL: (user.photoURL || '').slice(0, 1000),
+    lastSeen: serverTimestamp(),
+  });
+}
+
+// one person's card, live; null if they haven't opened the app since this was added
+export function watchPerson(email, onData) {
+  return onSnapshot(doc(db(), 'people', email), (s) => onData(s.exists() ? s.data() : null), () => onData(null));
+}
+
 export async function getLastListId(uid) {
   const snap = await getDoc(doc(db(), 'users', uid));
   return snap.exists() ? snap.data().lastListId || null : null;

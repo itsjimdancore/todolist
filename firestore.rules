@@ -13,7 +13,8 @@ rules_version = '2';
 //  To-do data layout
 //    users/{uid}                         profile, the list you had open last, your favourite lists, your list order,
 //                                        your Spotify player link, the songs on your Music page
-//    users/{uid}/log/{id}                my own activity, shown to me in Notifications ("You created …")
+//    people/{email}                      name, photo and when you were last active (fetched by people who know your email)
+//    users/{uid}/log/{id}              my own activity, shown to me in Notifications ("You created …")
 //    lists/{listId}                      title, owner, and who it's shared with
 //                                        (kind: 'letter' = a love letter: a body, shared with one person at most):
 //        roles:        { "friend@mail.com": "read" | "comment" | "write" | "readwrite" }
@@ -173,6 +174,21 @@ service cloud.firestore {
         && request.resource.data.get('spotify', '').size() <= 200
         && request.resource.data.get('music', []) is list
         && request.resource.data.get('music', []).size() <= 100;
+    }
+
+    // ---------- people/{email}: name, photo and "last active", shown when someone taps your avatar on a shared list ----------
+    // Only you write yours, and lastSeen is always the server's time. Anyone signed in can fetch one card by its
+    // email (they must already know it), but nobody can list them.
+    match /people/{email} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create, update: if hasEmail() && email == myEmail()
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'photoURL', 'lastSeen'])
+        && request.resource.data.email == myEmail()
+        && request.resource.data.displayName is string && request.resource.data.displayName.size() <= 120
+        && request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 1000
+        && request.resource.data.lastSeen == request.time;
+      allow delete: if hasEmail() && email == myEmail();
     }
 
     // ---------- my own activity ("You created …", "You added a song …"): only I can see it ----------

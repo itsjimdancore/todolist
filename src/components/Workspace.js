@@ -15,6 +15,7 @@ import {
   renameList,
   saveLastListId,
   saveListOrder,
+  savePresence,
   saveProfile,
   setFavorite,
   watchFavorites,
@@ -107,6 +108,21 @@ function WorkspaceInner({ user }) {
   // ---- save my profile once per sign-in
   useEffect(() => {
     saveProfile(user).catch(() => {});
+  }, [user]);
+
+  // ---- "last active" for the people I share with: on opening the app, on coming back to it, and every
+  //      5 minutes while it's on screen (never more often, so switching tabs doesn't write each time)
+  useEffect(() => {
+    let last = 0;
+    const ping = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - last < 5 * 60 * 1000 - 1000) return;
+      last = Date.now();
+      savePresence(user).catch(() => {});
+    };
+    ping();
+    const every = setInterval(ping, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', ping);
+    return () => { clearInterval(every); document.removeEventListener('visibilitychange', ping); };
   }, [user]);
 
   // ---- device notifications: if they're on for this device, keep its token current

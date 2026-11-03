@@ -25,17 +25,42 @@ export function colorFor(key) {
   return COLORS[h % COLORS.length];
 }
 
-export function Avatar({ person, size = 28 }) {
+// The person's photo when we have one (Google sign-in), their initials otherwise, or if the photo won't load.
+// title={false} leaves the hover tooltip off (when a card shows the name instead).
+export function Avatar({ person, size = 28, title = true }) {
   const name = displayName(person);
+  const photo = person?.photoURL;
   return (
     <span
-      className="av"
-      title={name}
+      className={photo ? 'av has-photo' : 'av'}
+      title={title ? name : undefined}
       style={{ background: colorFor(person?.email || name), width: size, height: size, fontSize: size * 0.38 }}
     >
       {initials(name)}
+      {photo && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={photo} alt="" referrerPolicy="no-referrer" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+      )}
     </span>
   );
+}
+
+// "Active now", "Active 12 min ago", "Active 3 h ago", "Last active yesterday at 14:20", "Last active 28 Oct at 09:05"
+export function lastSeenLabel(ts) {
+  if (!ts) return 'Not active here yet';
+  const d = toDate(ts);
+  const s = (Date.now() - d.getTime()) / 1000;
+  if (s < 6 * 60) return 'Active now'; // the app checks in every 5 minutes while it's open
+  if (s < 3600) return `Active ${Math.floor(s / 60)} min ago`;
+  if (s < 6 * 3600) return `Active ${Math.floor(s / 3600)} h ago`;
+  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = new Date(d); day.setHours(0, 0, 0, 0);
+  const days = Math.round((today - day) / 86400000);
+  if (days === 0) return `Last active today at ${time}`;
+  if (days === 1) return `Last active yesterday at ${time}`;
+  const date = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(d.getFullYear() !== today.getFullYear() && { year: 'numeric' }) });
+  return `Last active ${date} at ${time}`;
 }
 
 // Accepts a Firestore Timestamp, a Date, or nothing (a write that hasn't synced yet)

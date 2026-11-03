@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { friendlyError } from '@/lib/firebase';
 import { renameList, saveLetterBody, watchComments } from '@/lib/data';
 import { PERMISSIONS, canComment, canWrite, roleLabel } from '@/lib/permissions';
-import { Avatar, displayName, timeAgo } from '@/lib/people';
+import { displayName, timeAgo } from '@/lib/people';
+import PeopleStack from './PeopleStack';
 import { useToast } from './Toast';
 import Comments from './Comments';
 import { unreadCount, useCommentsSeen } from '@/lib/useCommentsSeen';
@@ -81,10 +82,7 @@ export default function LetterView({ list, role, user, contacts, onLeave, onDele
           </div>
         </div>
         <div className="bar-right">
-          <div className="avatars">
-            <Avatar person={owner} size={30} />
-            {toPerson && <Avatar person={toPerson} size={30} />}
-          </div>
+          <PeopleStack people={toPerson ? [owner, toPerson] : [owner]} me={user} />
           {isOwner ? (
             <>
               <button className="btn lv-rename" type="button" onClick={() => setRenaming(true)}>Edit title</button>
