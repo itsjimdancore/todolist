@@ -63,6 +63,7 @@ export const who = (n) => (n.self ? 'You' : n.from.displayName || n.from.email);
 export const where = (n) => (n.letter ? `the love letter “${n.listTitle}”` : `“${n.listTitle}”`);
 // What device notifications can be turned on or off for (Notification settings). All on until changed.
 export const NOTIFY_GROUPS = [
+  { key: 'chat', label: 'Chat messages', hint: 'New messages in your private chat' },
   { key: 'share', label: 'Shared with me', hint: 'A list or love letter is shared with you' },
   { key: 'tasks', label: 'Tasks', hint: 'Added, done, renamed, dates, details, links, archived or deleted' },
   { key: 'comments', label: 'Comments', hint: 'New, edited or deleted comments' },
@@ -72,6 +73,7 @@ export const NOTIFY_GROUPS = [
 ];
 export function notifyGroup(kind) {
   if (kind === 'share') return 'share';
+  if (kind === 'chat') return 'chat';
   if (isComment({ kind })) return 'comments';
   if (kind.startsWith('task-')) return 'tasks';
   if (kind.startsWith('member-') || kind.startsWith('access-')) return 'members';

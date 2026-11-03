@@ -9,6 +9,7 @@ import { friendlyError } from '@/lib/firebase';
 import { useHolidayCountries, useHolidayCountry, useHolidays } from '@/lib/holidays';
 import { canWrite } from '@/lib/permissions';
 import { colorFor, initials, toDate } from '@/lib/people';
+import { ShareCalendarButton, ShareCalendarDialog, SharedCalendarsBar } from './CalendarShare';
 import DaySheet from './DaySheet';
 import DuePicker from './DuePicker';
 import Loading, { Spinner } from './Loading';
@@ -76,7 +77,9 @@ function targetAt(x, y) {
 }
 const minuteIn = (colEl, y) => clamp(((y - colEl.getBoundingClientRect().top) / HOUR_PX) * 60, 0, 1440);
 
-export default function Calendar({ lists, byList, user, onOpen }) {
+// lists: my lists, plus (calOwner set) the lists of calendars shared with me
+// shares: who I've shared my calendar with · withMe: calendars shared with me ([{ share, lists }])
+export default function Calendar({ lists, byList, user, onOpen, shares = null, withMe = [], contacts = [] }) {
   const toast = useToast();
   const narrow = useNarrow();
   const today = todayKey();
@@ -106,7 +109,9 @@ export default function Calendar({ lists, byList, user, onOpen }) {
   // ---- what's on screen
   const order = new Map(lists.map((l, i) => [l.id, i]));
   const q = query.trim().toLowerCase();
-  const visibleLists = lists.filter((l) => !hidden.has(l.id));
+  const [hiddenOwners, setHiddenOwners] = useState(() => new Set()); // shared calendars switched off
+  const [sharing, setSharing] = useState(false); // the Share calendar window
+  const visibleLists = lists.filter((l) => !hidden.has(l.id) && !(l.calOwnerUid && hiddenOwners.has(l.calOwnerUid)));
   const entries = taskEntries(visibleLists, byList).filter((e) => !q || e.t.text.toLowerCase().includes(q));
   const manual = (a, b) => order.get(a.l.id) - order.get(b.l.id) || toDate(a.t.createdAt) - toDate(b.t.createdAt);
   const sorter = { manual, title: (a, b) => a.t.text.localeCompare(b.t.text), open: (a, b) => a.t.done - b.t.done || manual(a, b) }[sort];
@@ -331,9 +336,11 @@ export default function Calendar({ lists, byList, user, onOpen }) {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  // Clicking a day (anywhere but on a task): that day's sheet, with everything on it (or the form, if nothing is)
+  // Clicking a day (anywhere but on a task): in Month view it's picked, and its activities are listed beside
+  // (or under) the month, with Open (the day's popup) and + Add; in Week view the day's popup opens
   const dayClick = (key) => (e) => {
     if (e.target.closest('button, input, select, form')) return;
+    if (view === 'month') { setCursor(key); setPanel(null); return; }
     openDay(key);
   };
 
@@ -386,9 +393,16 @@ export default function Calendar({ lists, byList, user, onOpen }) {
       <header className="bar">
         <div className="bar-left">
           <h1>Calendar</h1>
-          <div className="meta">Tasks with a due date, from every list you can open</div>
+          <div className="meta">Tasks with a due date, from every list you can open{withMe.length ? ' and every calendar shared with you' : ''}</div>
+        </div>
+        <div className="bar-right">
+          <ShareCalendarButton user={user} shares={shares} contacts={contacts} onOpen={() => setSharing(true)} />
         </div>
       </header>
+
+      <SharedCalendarsBar user={user} shares={shares} withMe={withMe} hiddenOwners={hiddenOwners} setHiddenOwners={setHiddenOwners}
+        onShare={() => setSharing(true)} />
+      {sharing && <ShareCalendarDialog user={user} shares={shares || []} contacts={contacts} onClose={() => setSharing(false)} />}
 
       {/* Toolbar: Search · Filter · Sort · No date · + New task */}
       <div className="cal-toolbar">
@@ -452,6 +466,7 @@ export default function Calendar({ lists, byList, user, onOpen }) {
 
       <div className="page-body">
       {view === 'month' ? (
+        <div className="cal-split">
         <section className="cal-month" aria-label={title}>
           <div className="cal-heads" aria-hidden="true">{HEADS.map((h) => <span key={h}>{h}</span>)}</div>
           <div className="cal-grid" role="grid" aria-label={title} ref={grid} onKeyDown={onGridKey}>
@@ -482,6 +497,9 @@ export default function Calendar({ lists, byList, user, onOpen }) {
             ))}
           </div>
         </section>
+        <DayAgenda day={cursor} today={today} items={byDay.get(cursor) || []} holiday={holidays.byDay.get(cursor)} loading={loading}
+          actions={actions} canAdd={canAdd} onOpen={() => openDay(cursor)} onAdd={() => openDay(cursor, { due: cursor })} />
+        </div>
       ) : view === 'week' ? (
         <WeekView days={weekDays} today={today} byDay={byDay} holidays={holidays.byDay} preview={preview} dropDay={dropDay} quick={quick}
           grid={grid} onKey={onGridKey} cellProps={cellProps} dayChips={dayChips}
@@ -493,25 +511,6 @@ export default function Calendar({ lists, byList, user, onOpen }) {
         <YearsView start={yearsStart} current={fromKey(today).getFullYear()} selected={y} byDay={byDay} onPick={pickYear} />
       )}
 
-      {/* Phones: the selected day's tasks under the month */}
-      {narrow && view === 'month' && (
-        <section className="cal-agenda" aria-label={longDay(cursor)}>
-          <div className="cal-agenda-h">
-            <h3>{cursor === today ? `Today · ${longDay(cursor)}` : longDay(cursor)}</h3>
-            {canAdd && <button type="button" className="link" onClick={() => openDay(cursor, { due: cursor })}>+ Add</button>}
-          </div>
-          {holidays.byDay.has(cursor) && <p className="cal-hol-line">🎉 Public holiday: {holidays.byDay.get(cursor).name}</p>}
-          {(byDay.get(cursor) || []).length ? (
-            <ul className="cal-rows">
-              {(byDay.get(cursor) || []).map((e) => <TaskRow key={`${e.l.id}/${e.t.id}`} entry={e} actions={actions} />)}
-            </ul>
-          ) : loading ? (
-            <Loading hint="Getting your tasks" />
-          ) : (
-            <p className="cal-empty">Nothing due on this day.</p>
-          )}
-        </section>
-      )}
       </div>
 
       {quick && (
@@ -545,6 +544,35 @@ export default function Calendar({ lists, byList, user, onOpen }) {
         </div>
       )}
     </div>
+  );
+}
+
+// The picked day's activities, listed beside the month (under it on phones and tablets): each with its list,
+// time and date. Open shows the day in a popup (a numbered table, and adding to it); + Add goes straight to the form.
+function DayAgenda({ day, today, items, holiday, loading, actions, canAdd, onOpen, onAdd }) {
+  return (
+    <section className="cal-agenda" aria-label={longDay(day)}>
+      <div className="cal-agenda-h">
+        <h3>{day === today ? `Today · ${longDay(day)}` : longDay(day)}</h3>
+        <div className="cal-agenda-acts">
+          <button type="button" className="btn small" onClick={onOpen} title="See this day in a popup">Open</button>
+          {canAdd && <button type="button" className="btn small primary" onClick={onAdd}>+ Add</button>}
+        </div>
+      </div>
+      {holiday && <p className="cal-hol-line">🎉 Public holiday: {holiday.name}</p>}
+      {items.length ? (
+        <ul className="cal-rows">
+          {items.map((e) => <TaskRow key={`${e.l.id}/${e.t.id}`} entry={e} actions={actions} />)}
+        </ul>
+      ) : loading ? (
+        <Loading hint="Getting your tasks" />
+      ) : (
+        <div className="cal-agenda-empty">
+          <p>Nothing planned on this day.</p>
+          {canAdd && <button type="button" className="btn primary" onClick={onAdd}>+ Add an activity</button>}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -943,7 +971,7 @@ function FilterMenu({ lists, hidden, setHidden }) {
           {lists.map((l) => (
             <label key={l.id} className="cal-menu-i">
               <input type="checkbox" checked={!hidden.has(l.id)} onChange={() => toggle(l.id)} />
-              <i style={{ background: colorFor(l.id) }} />{l.title}
+              <i style={{ background: colorFor(l.id) }} />{l.title}{l.calOwner && <em className="cal-owner"> · {l.calOwner}</em>}
             </label>
           ))}
           {hidden.size > 0 && <button type="button" className="link" onClick={() => setHidden(new Set())}>Show all lists</button>}
@@ -1003,7 +1031,7 @@ function TaskRow({ entry, actions, picker = true }) {
       <div className="cal-r-b">
         <button type="button" className="cal-r-t" onClick={() => actions.open(entry)}>{t.text}</button>
         <span className="cal-r-m">
-          <i style={{ background: colorFor(l.id) }} />{l.title}
+          <i style={{ background: colorFor(l.id) }} />{l.title}{l.calOwner && ` · ${l.calOwner}`}
           {t.start && <em className="cal-r-time"> · {timeRange(t.start, t.mins)}</em>}
         </span>
       </div>
@@ -1032,7 +1060,8 @@ function TaskPanel({ entry, actions, onClose }) {
   return (
     <aside className="cal-panel" ref={box} role="dialog" aria-label={t.text}>
       <TaskDetails task={t} list={l} write={canWrite(l.role)} on={on} onClose={onClose}
-        footer={isUnplaced(l) ? <p className="cal-hint">Not in a list yet. Put it in one from Unplaced on My List.</p>
+        footer={l.calOwner ? <p className="cal-hint">On {l.calOwner}&apos;s calendar, shared with you.</p>
+          : isUnplaced(l) ? <p className="cal-hint">Not in a list yet. Put it in one from Unplaced on My List.</p>
           : <button type="button" className="btn block" onClick={() => actions.openList(l)}>Open “{l.title}”</button>} />
     </aside>
   );

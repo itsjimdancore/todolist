@@ -26,6 +26,7 @@ import {
   watchListOrder,
   watchOwnedLists,
   watchSharedLists,
+  markListKinds,
   watchMusic,
   watchSpotify,
 } from '@/lib/data';
@@ -34,6 +35,9 @@ import { pausePush, refreshPush } from '@/lib/push';
 import { Avatar, colorFor, displayName, toDate } from '@/lib/people';
 import Board from './Board';
 import Unplaced from './Unplaced';
+import Chat from './Chat';
+import { useChat } from '@/lib/useChat';
+import { useCalendarsSharedWithMe, useMyCalendarShares } from '@/lib/useSharedCalendars';
 import Calendar, { dueNowCount, taskEntries, useAllTasks } from './Calendar';
 import Emblem from './Emblem';
 import ListDialog from './ListDialogs';
@@ -61,7 +65,8 @@ export default function Workspace(props) {
 // Signing in lands on "My List" (the board), unless a shared link (?list=…) points at one list
 function initialView() {
   const q = new URLSearchParams(window.location.search);
-  if (['calendar', 'notifications', 'letters', 'music'].includes(q.get('view'))) return q.get('view');
+  if (q.get('chat') === '1') return 'chat'; // opened from a chat message's device notification
+  if (['calendar', 'notifications', 'letters', 'music', 'chat'].includes(q.get('view'))) return q.get('view');
   return q.get('view') === 'board' || !q.get('list') ? 'board' : 'list';
 }
 
@@ -150,6 +155,16 @@ function WorkspaceInner({ user }) {
     () => watchOwnedLists(user.uid, setOwned, (e) => { setOwned([]); toast(friendlyError(e), 'err'); }),
     [user.uid, toast],
   );
+
+  // a shared calendar only finds lists marked as to-do lists; older lists of mine get the mark once
+  useEffect(() => { if (owned?.length) markListKinds(owned).catch(() => {}); }, [owned]);
+
+  // ---- the private chat, live everywhere (the sidebar shows how many messages are unread)
+  const chatApi = useChat(user);
+
+  // ---- calendars: who I've shared mine with, and the ones shared with me (with their lists)
+  const calShares = useMyCalendarShares(user.uid);
+  const calsWithMe = useCalendarsSharedWithMe(email);
 
   // ---- live list of everything shared with me
   useEffect(
@@ -248,7 +263,8 @@ function WorkspaceInner({ user }) {
     const url = new URL(window.location.href);
     if (activeId) url.searchParams.set('list', activeId);
     url.searchParams.delete('reply'); // used once, on arrival from a comment's device notification
-    if (['board', 'calendar', 'notifications', 'letters', 'music'].includes(view)) url.searchParams.set('view', view);
+    url.searchParams.delete('chat'); // likewise, from a chat message's
+    if (['board', 'calendar', 'notifications', 'letters', 'music', 'chat'].includes(view)) url.searchParams.set('view', view);
     else url.searchParams.delete('view');
     const n = nav.current;
     const moved = n.ready && !n.popping && (view !== n.view || (view === 'list' && activeId !== n.list && n.list));
@@ -371,7 +387,7 @@ function WorkspaceInner({ user }) {
   const active = lists?.find((l) => l.id === activeId) || null;
   // the ‹ back link above an open list's (or letter's) name: named after the page Back returns to,
   // or the page it belongs to when it was opened straight from a link
-  const PAGE_NAMES = { board: 'My List', calendar: 'Calendar', letters: 'Love letters', music: 'Music', notifications: 'Notifications' };
+  const PAGE_NAMES = { board: 'My List', calendar: 'Calendar', letters: 'Love letters', chat: 'Chat', music: 'Music', notifications: 'Notifications' };
   const backLabel = active?.kind === 'letter' ? 'Love letters' // a letter always goes back to the Love letters page
     : PAGE_NAMES[backFrom] || (backFrom === 'list' ? 'Back' : 'My List');
   const back = { label: backLabel, onClick: goBack };
@@ -390,10 +406,17 @@ function WorkspaceInner({ user }) {
   const arranged = arrange(todoLists);
   // Tasks of every open list, live: the calendar shows them, the sidebar counts what's due
   const openLists = arranged.filter((l) => !l.archived);
-  const calLists = unplaced ? [...openLists, unplaced] : openLists;
+  // lists on calendars shared with me: I can see and change them like a list shared with me to edit
+  // (not the ones that are also shared with me directly; those are already in my lists)
+  const mineIds = new Set((lists || []).map((l) => l.id));
+  const sharedCalLists = calsWithMe.flatMap(({ share, lists: ls }) => ls
+    .filter((l) => !l.archived && !mineIds.has(l.id))
+    .map((l) => ({ ...l, role: 'write', calOwner: (share.ownerName || share.ownerEmail).split(' ')[0], calOwnerUid: share.ownerUid })));
+  const calLists = [...openLists, ...(unplaced ? [unplaced] : []), ...sharedCalLists];
   // every list's tasks (archived too, so My List can search them); the calendar only uses the open lists'
-  const allTasks = useAllTasks(unplaced ? [...arranged, unplaced] : arranged);
-  const dueNow = dueNowCount(taskEntries(calLists, allTasks));
+  const allTasks = useAllTasks([...arranged, ...(unplaced ? [unplaced] : []), ...sharedCalLists]);
+  // the sidebar's count is for my own lists only
+  const dueNow = dueNowCount(taskEntries(unplaced ? [...openLists, unplaced] : openLists, allTasks));
   // Shares + due / overdue reminders, for the bell and the Notifications page
   const notif = useNotifications({ invites, activity, log, me, user, lists, tasksByList: allTasks, uid: user.uid, openListId: view === 'list' ? activeId : null });
   const showNotifications = () => { setView('notifications'); setMenuOpen(false); };
@@ -481,6 +504,12 @@ function WorkspaceInner({ user }) {
                 <Icon name="heart" /><span className="lbl">Love letters</span>
                 {letters.length > 0 && <span className="count">{letters.filter((l) => !l.archived).length}</span>}
               </button>
+              <button type="button" className={view === 'chat' ? 'nav-i on' : 'nav-i'} title="Chat"
+                aria-current={view === 'chat' ? 'page' : undefined}
+                onClick={() => { setView('chat'); setMenuOpen(false); }}>
+                <Icon name="chat" /><span className="lbl">Chat</span>
+                {chatApi.unread > 0 && <span className="count unread-count" aria-label={`${chatApi.unread} unread`}>{chatApi.unread}</span>}
+              </button>
               <button type="button" className={view === 'music' ? 'nav-i on' : 'nav-i'} title="Music"
                 aria-current={view === 'music' ? 'page' : undefined}
                 onClick={() => { setView('music'); setMenuOpen(false); }}>
@@ -532,7 +561,10 @@ function WorkspaceInner({ user }) {
         ) : view === 'notifications' ? (
           <NotificationsPage api={notif} user={user} onOpen={openNote} />
         ) : view === 'calendar' ? (
-          <Calendar lists={calLists} byList={allTasks} user={user} onOpen={pick} />
+          <Calendar lists={calLists} byList={allTasks} user={user} onOpen={pick}
+            shares={calShares} withMe={calsWithMe} contacts={contacts} />
+        ) : view === 'chat' ? (
+          <Chat api={chatApi} user={user} contacts={contacts} back={back} />
         ) : view === 'music' ? (
           <Music user={user} music={music} nowPlaying={nowPlaying || ''} />
         ) : view === 'letters' ? (
@@ -623,6 +655,7 @@ const ICONS = {
   close: <path d="M18 6 6 18M6 6l12 12" />,
   heart: <path d="M12 20s-7-4.4-9-8.8C1.6 8 3.6 4.5 7 4.5c2 0 3.4 1.1 5 2.8 1.6-1.7 3-2.8 5-2.8 3.4 0 5.4 3.5 4 6.7C19 15.6 12 20 12 20z" />,
   bell: <><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></>,
+  chat: <><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.1A8 8 0 1 1 20 12z" /></>,
   music: <><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></>,
 };
 

@@ -8,6 +8,37 @@ import { makeReplyToken } from '@/lib/replyToken';
 
 const RATE_MS = 10 * 1000; // at most one device notification per sender, per list, per person every 10 seconds
 
+// A chat message: to the other person's devices (if they want chat notifications), with a reply box where the
+// system has one. msg: { chatId, to, fromName, text }
+export async function deliverChat(a, msg, origin) {
+  const tokens = await a.db.collection('pushTokens').where('email', '==', msg.to).get();
+  if (tokens.empty) return 0;
+  const prefs = new Map();
+  const wanted = [];
+  for (const t of tokens.docs) {
+    const uid = t.data().uid;
+    if (!prefs.has(uid)) prefs.set(uid, await a.db.collection('users').doc(uid).get().then((s) => s.data()?.notify || {}).catch(() => ({})));
+    if (wantsPush(prefs.get(uid), 'chat')) wanted.push(t.id);
+  }
+  if (!wanted.length) return 0;
+  const name = (msg.fromName || 'Someone').slice(0, 60);
+  const text = String(msg.text || '').replace(/s+/g, ' ').trim();
+  const replyToken = makeReplyToken({ email: msg.to, chatId: msg.chatId });
+  const res = await a.messaging.sendEachForMulticast({
+    tokens: wanted,
+    data: {
+      title: name, body: text.length > 180 ? `${text.slice(0, 179)}…` : text, link: `${origin}/?chat=1`,
+      tag: `chat-${createHash('sha1').update(msg.chatId).digest('hex').slice(0, 12)}`, renotify: '1', reply: '1',
+      ...(replyToken ? { replyToken, replyUrl: `${origin}/api/reply`, replyTo: name } : {}),
+    },
+    webpush: { headers: { Urgency: 'high', TTL: String(24 * 3600) } },
+  }).catch(() => null);
+  if (!res) return 0;
+  await Promise.all(res.responses.map((r, i) =>
+    !r.success && DEAD_TOKEN.has(r.error?.code) ? a.db.collection('pushTokens').doc(wanted[i]).delete().catch(() => {}) : null));
+  return res.successCount;
+}
+
 // a: admin(); items: [{ col, id, doc }]; origin: where the links should open; senderEmail: who caused them
 export async function deliver(a, items, origin, senderEmail) {
   let sent = 0;

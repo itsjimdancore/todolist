@@ -17,7 +17,8 @@ const NEW_LIST = '__new';
 
 const dateLong = (key) => fromKey(key).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const dateShort = (key) => fromKey(key).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-const listName = (l) => (isUnplaced(l) ? UNPLACED_TITLE : l.title);
+// whose it is too, for a list on a calendar shared with me
+const listName = (l) => `${isUnplaced(l) ? UNPLACED_TITLE : l.title}${l.calOwner ? ` · ${l.calOwner}'s calendar` : ''}`;
 
 // Clicking a day on the Calendar: everything happening that day, as a numbered table
 // (#, Task: title · what's going to be done · location, Link, Date + time, Added by, Status), and a form to add
@@ -221,7 +222,7 @@ function AddForm({ day, init, lists, user, onSaved, onCancel, cancelLabel, onExi
 
   const listOptions = [
     { value: NONE, label: 'No list: keep it in Unplaced' },
-    ...placeable.map((l) => ({ value: l.id, label: l.title, divider: false })),
+    ...placeable.map((l) => ({ value: l.id, label: l.calOwner ? `${l.title} · ${l.calOwner}` : l.title, divider: false })),
     { value: NEW_LIST, label: '＋ Create a new list…', divider: true },
   ];
 

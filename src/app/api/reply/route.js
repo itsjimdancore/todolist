@@ -6,7 +6,7 @@
 // comments (sent to their devices too), and the notification you answered marked as read.
 import { createHash } from 'node:crypto';
 import { admin } from '@/lib/pushAdmin';
-import { deliver } from '@/lib/pushSend';
+import { deliver, deliverChat } from '@/lib/pushSend';
 import { readReplyToken } from '@/lib/replyToken';
 
 export const runtime = 'nodejs';
@@ -29,6 +29,9 @@ export async function POST(req) {
 
   const a = await admin();
   if (a.error) return fail(a.error, 503);
+
+  // a reply to a chat message: posted in the private chat, as if typed in the app
+  if (pass.chatId) return replyInChat(a, pass, text.slice(0, 4000), new URL(req.url).origin);
 
   // still allowed to comment on this list?
   const listRef = a.db.collection('lists').doc(pass.listId);
@@ -95,4 +98,40 @@ export async function POST(req) {
 
   await deliver(a, items, new URL(req.url).origin, pass.email).catch(() => 0);
   return Response.json({ ok: true, listTitle });
+}
+
+// The pass is for a chat: the person must still be one of its two members
+async function replyInChat(a, pass, text, origin) {
+  const chatRef = a.db.collection('chats').doc(pass.chatId);
+  const chat = await chatRef.get().catch(() => null);
+  const members = chat?.exists ? chat.data().members || [] : [];
+  if (!members.includes(pass.email)) return fail('That chat is gone.', 404);
+  const who = await a.auth.getUserByEmail(pass.email).catch(() => null);
+  if (!who) return fail('Sign in to the app again, then reply.', 403);
+  const profile = await a.db.collection('users').doc(who.uid).get().then((s) => s.data() || {}).catch(() => ({}));
+  const name = (profile.displayName || who.displayName || pass.email.split('@')[0]).slice(0, 120);
+
+  const rateRef = a.db.collection('replyRate').doc(createHash('sha1').update(`${pass.email}|chat|${pass.chatId}`).digest('hex'));
+  const allowed = await a.db.runTransaction(async (tx) => {
+    const r = await tx.get(rateRef);
+    if (r.exists && Date.now() - (r.data().at || 0) < RATE_MS) return false;
+    tx.set(rateRef, { at: Date.now() });
+    return true;
+  }).catch(() => true);
+  if (!allowed) return fail('Wait a moment before replying again.', 429);
+
+  const now = a.FieldValue.serverTimestamp();
+  const msgRef = chatRef.collection('messages').doc();
+  const b = a.db.batch();
+  b.set(msgRef, { from: pass.email, text, createdAt: now, pushedAt: now });
+  b.update(chatRef, 'last', { text: text.slice(0, 200), from: pass.email, at: now },
+    new a.FieldPath('readAt', pass.email), now, new a.FieldPath('names', pass.email), name);
+  try {
+    await b.commit();
+  } catch (e) {
+    return fail(`Couldn't send your reply (${e.code || e.message}).`, 500);
+  }
+  const to = members.find((e) => e !== pass.email);
+  if (to) await deliverChat(a, { chatId: pass.chatId, to, fromName: name, text }, origin).catch(() => 0);
+  return Response.json({ ok: true });
 }

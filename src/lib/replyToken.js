@@ -20,15 +20,15 @@ function secret() {
 const b64 = (buf) => Buffer.from(buf).toString('base64url');
 const sign = (body, key) => createHmac('sha256', key).update(body).digest();
 
-// { email, listId, activityId } → "body.signature", or null if the server has no secret
-export function makeReplyToken({ email, listId, activityId }) {
+// { email, listId, activityId } (a comment) or { email, chatId } (a chat message) → "body.signature", or null if the server has no secret
+export function makeReplyToken({ email, listId = '', activityId = '', chatId = '' }) {
   const key = secret();
   if (!key) return null;
-  const body = b64(JSON.stringify({ e: email, l: listId, a: activityId || '', x: Date.now() + DAYS * 86400000 }));
+  const body = b64(JSON.stringify({ e: email, l: listId || '', a: activityId || '', ...(chatId ? { c: chatId } : {}), x: Date.now() + DAYS * 86400000 }));
   return `${body}.${b64(sign(body, key))}`;
 }
 
-// → { email, listId, activityId } if the pass is genuine and not expired, else null
+// → { email, listId, activityId, chatId } if the pass is genuine and not expired, else null
 export function readReplyToken(token) {
   const key = secret();
   if (!key || typeof token !== 'string' || token.length > 2000) return null;
@@ -40,5 +40,5 @@ export function readReplyToken(token) {
   let p;
   try { p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch { return null; }
   if (!p || typeof p.e !== 'string' || typeof p.l !== 'string' || !(p.x > Date.now())) return null;
-  return { email: p.e, listId: p.l, activityId: typeof p.a === 'string' ? p.a : '' };
+  return { email: p.e, listId: p.l, activityId: typeof p.a === 'string' ? p.a : '', chatId: typeof p.c === 'string' ? p.c : '' };
 }

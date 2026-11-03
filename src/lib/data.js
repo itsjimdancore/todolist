@@ -323,6 +323,114 @@ export function leaveList(list, user) {
 // The owner clearing someone from the "left the list" section without re-sharing
 export const clearLeft = (id, email) => updateDoc(listRef(id), 'leftEmails', arrayRemove(email));
 
+// ---------- private chat (two people, like WhatsApp) ----------
+// chats/{a|b}: the two members' emails, sorted and joined, so there's one chat per pair and only those two
+// can ever be in it. Messages live in chats/{id}/messages. firestore.rules keeps everyone else out.
+export const chatIdFor = (a, b) => [a, b].map((e) => String(e).trim().toLowerCase()).sort().join('|');
+const chatRef = (id) => doc(db(), 'chats', id);
+const msgsCol = (id) => collection(db(), 'chats', id, 'messages');
+export const MAX_MESSAGE = 4000;
+
+// my chats (live). The app uses the one private chat: the first.
+export function watchMyChats(email, onData, onError) {
+  return onSnapshot(query(collection(db(), 'chats'), where('members', 'array-contains', email)), (s) => onData(withId(s)), onError);
+}
+
+export async function startChat(user, otherEmail) {
+  const me = emailOf(user);
+  const id = chatIdFor(me, otherEmail);
+  await setDoc(chatRef(id), {
+    members: id.split('|'), names: { [me]: nameOf(user).slice(0, 120) },
+    createdBy: user.uid, createdAt: serverTimestamp(), readAt: {}, typing: {},
+  });
+  return id;
+}
+
+// the newest n messages, oldest first (live)
+export function watchMessages(chatId, n, onData, onError) {
+  return onSnapshot(query(msgsCol(chatId), orderBy('createdAt', 'desc'), limit(n)),
+    (s) => onData(withId(s).reverse(), s.size), onError);
+}
+
+// reply: { id, text, from } of the message being answered
+export async function sendMessage(chatId, user, text, reply = null) {
+  const me = emailOf(user);
+  const ref = doc(msgsCol(chatId));
+  const b = writeBatch(db());
+  b.set(ref, { from: me, text, createdAt: serverTimestamp(), ...(reply ? { reply } : {}) });
+  b.update(chatRef(chatId),
+    'last', { text: text.slice(0, 200), from: me, at: serverTimestamp() },
+    new FieldPath('readAt', me), serverTimestamp(),
+    new FieldPath('typing', me), deleteField(),
+    new FieldPath('names', me), nameOf(user).slice(0, 120));
+  await b.commit();
+  pushChat(chatId, ref.id);
+  return ref.id;
+}
+
+// a device notification for the other person (and a reply box on it, where the system has one)
+function pushChat(chatId, messageId) {
+  const me = fb().auth.currentUser;
+  if (!me) return;
+  me.getIdToken()
+    .then((token) => fetch('/api/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ chat: { chatId, messageId } }),
+      keepalive: true,
+    }))
+    .catch(() => {});
+}
+
+export const editMessage = (chatId, id, text) =>
+  updateDoc(doc(msgsCol(chatId), id), { text, editedAt: serverTimestamp() });
+// for everyone: it stays in the chat as "This message was deleted"
+export const deleteMessage = (chatId, id) =>
+  updateDoc(doc(msgsCol(chatId), id), { text: '', deleted: true, reply: deleteField(), editedAt: deleteField() });
+
+export const markChatRead = (chatId, user) =>
+  updateDoc(chatRef(chatId), new FieldPath('readAt', emailOf(user)), serverTimestamp());
+// "typing…": on while typing (refreshed every few seconds), off when sent or cleared
+export const setTyping = (chatId, user, on) =>
+  updateDoc(chatRef(chatId), new FieldPath('typing', emailOf(user)), on ? serverTimestamp() : deleteField());
+
+// ---------- shared calendars ----------
+// calendarShares/{ownerUid}_{email}: I share my whole calendar (every to-do list I own, now and later, not love
+// letters) with someone, to see and change: tick off, add, edit, archive, delete. They see it on their Calendar.
+const calShareRef = (uid, email) => doc(db(), 'calendarShares', `${uid}_${email}`);
+
+export function shareCalendar(user, emails) {
+  const b = writeBatch(db());
+  for (const to of emails) {
+    b.set(calShareRef(user.uid, to), {
+      ownerUid: user.uid, ownerEmail: emailOf(user), ownerName: nameOf(user).slice(0, 120), to, seen: false, createdAt: serverTimestamp(),
+    });
+  }
+  return b.commit();
+}
+// the owner stops sharing, or the person it was shared with removes it from their Calendar
+export const unshareCalendar = (ownerUid, email) => writeBatch(db()).delete(calShareRef(ownerUid, email)).commit();
+export const markCalendarSeen = (ownerUid, email) => updateDoc(calShareRef(ownerUid, email), { seen: true });
+
+// who I've shared my calendar with / whose calendars are shared with me (live)
+export const watchMyCalendarShares = (uid, onData, onError) =>
+  onSnapshot(query(collection(db(), 'calendarShares'), where('ownerUid', '==', uid)), (s) => onData(withId(s)), onError);
+export const watchCalendarsSharedWithMe = (email, onData, onError) =>
+  onSnapshot(query(collection(db(), 'calendarShares'), where('to', '==', email)), (s) => onData(withId(s)), onError);
+
+// someone's to-do lists, through their shared calendar (live)
+export const watchCalendarLists = (ownerUid, onData, onError) =>
+  onSnapshot(query(collection(db(), 'lists'), where('ownerId', '==', ownerUid), where('kind', '==', 'list')), (s) => onData(withId(s)), onError);
+
+// Lists made before love letters existed have no kind; a shared calendar only finds lists marked 'list'
+export function markListKinds(owned) {
+  const old = owned.filter((l) => !l.kind);
+  if (!old.length) return Promise.resolve();
+  const b = writeBatch(db());
+  old.forEach((l) => b.update(listRef(l.id), { kind: 'list' }));
+  return b.commit();
+}
+
 // ---------- notifications ----------
 export function watchInvites(email, onData, onError) {
   return onSnapshot(query(collection(db(), 'invites'), where('to', '==', email)), (s) => onData(withId(s)), onError);

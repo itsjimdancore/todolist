@@ -112,6 +112,16 @@ service cloud.firestore {
         : hasEmail() ? list.roles.get(myEmail(), null)
         : null;
     }
+    // Calendar sharing: calendarShares/{ownerUid}_{email} lets that email see and change every to-do list
+    // the owner has (not love letters), as if each were shared with them to edit (see calendarShares below)
+    function calShared(list) {
+      return hasEmail() && kindOf(list) == 'list'
+        && exists(/databases/$(database)/documents/calendarShares/$(list.ownerId + '_' + myEmail()));
+    }
+    // roleIn, or 'write' through a shared calendar
+    function effRole(list) {
+      return roleIn(list) != null ? roleIn(list) : calShared(list) ? 'write' : null;
+    }
     function canRead(role)    { return role != null; }
     function canWrite(role)   { return role in ['owner', 'write', 'readwrite']; }
     function canComment(role) { return role in ['owner', 'comment', 'readwrite']; }
@@ -157,15 +167,16 @@ service cloud.firestore {
         && request.resource.data.get('reminders', {}).get('read', []).size() <= 300
         && request.resource.data.get('reminders', {}).get('gone', []) is list
         && request.resource.data.get('reminders', {}).get('gone', []).size() <= 300
-        // which kinds of device notifications I want: { share, tasks, comments, members, lists, music } → true/false
+        // which kinds of device notifications I want: { share, tasks, comments, members, lists, music, chat } → true/false
         && request.resource.data.get('notify', {}) is map
-        && request.resource.data.get('notify', {}).keys().hasOnly(['share', 'tasks', 'comments', 'members', 'lists', 'music'])
+        && request.resource.data.get('notify', {}).keys().hasOnly(['share', 'tasks', 'comments', 'members', 'lists', 'music', 'chat'])
         && request.resource.data.get('notify', {}).get('share', true) is bool
         && request.resource.data.get('notify', {}).get('tasks', true) is bool
         && request.resource.data.get('notify', {}).get('comments', true) is bool
         && request.resource.data.get('notify', {}).get('members', true) is bool
         && request.resource.data.get('notify', {}).get('lists', true) is bool
         && request.resource.data.get('notify', {}).get('music', true) is bool
+        && request.resource.data.get('notify', {}).get('chat', true) is bool
         && request.resource.data.get('favorites', []) is list
         && request.resource.data.get('favorites', []).size() <= 500
         && request.resource.data.get('listOrder', []) is list
@@ -218,6 +229,9 @@ service cloud.firestore {
       allow read: if signedIn() && (
         resource.data.ownerId == request.auth.uid
         || (hasEmail() && myEmail() in resource.data.memberEmails)
+        // the owner shared their calendar with me (the app asks for kind == 'list')
+        || (hasEmail() && resource.data.kind == 'list'
+          && exists(/databases/$(database)/documents/calendarShares/$(resource.data.ownerId + '_' + myEmail())))
       );
 
       // anyone signed in can create their own list (shared with nobody yet)
@@ -234,8 +248,8 @@ service cloud.firestore {
           && request.resource.data.ownerEmail == resource.data.ownerEmail
           && kindOf(request.resource.data) == kindOf(resource.data)
           && validList(request.resource.data))
-        // write roles: only bump "last changed" when they edit tasks
-        || (canWrite(roleIn(resource.data))
+        // write roles (and shared calendars): only bump "last changed" when they edit tasks
+        || (canWrite(effRole(resource.data))
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']))
         // write roles on a love letter: edit the letter itself
         || (canWrite(roleIn(resource.data)) && kindOf(resource.data) == 'letter'
@@ -275,15 +289,15 @@ service cloud.firestore {
             && d.updatedBy == request.auth.uid;
         }
 
-        allow read: if canRead(roleIn(listData(listId)));
-        allow create: if canWrite(roleIn(listData(listId)))
+        allow read: if canRead(effRole(listData(listId)));
+        allow create: if canWrite(effRole(listData(listId)))
           && validTask(request.resource.data)
           && request.resource.data.createdBy == request.auth.uid;
-        allow update: if canWrite(roleIn(listData(listId)))
+        allow update: if canWrite(effRole(listData(listId)))
           && validTask(request.resource.data)
           && request.resource.data.createdBy == resource.data.createdBy
           && request.resource.data.createdAt == resource.data.createdAt;
-        allow delete: if canWrite(roleIn(listData(listId)));
+        allow delete: if canWrite(effRole(listData(listId)));
       }
 
       // ---------- comments ----------
@@ -361,6 +375,86 @@ service cloud.firestore {
     //   tasks and letters   sent by someone who can write, to anyone on the list
     //   the list itself     sent by the owner, to anyone on the list
     //   member-left         sent by the member who leaves, to anyone on the list
+    // ---------- private chat (two people, like WhatsApp) ----------
+    // chats/{a|b}: a and b are the two members' emails, sorted, so there's one chat per pair and it can only
+    // ever have those two people. Nobody can add a third member, delete it, or read it from outside.
+    match /chats/{chatId} {
+      function isMember(d) { return hasEmail() && myEmail() in d.members; }
+      // only my own entry in a map of { email: … } changes
+      function onlyMine(field) {
+        return request.resource.data.get(field, {}).diff(resource.data.get(field, {})).affectedKeys().hasOnly([myEmail()]);
+      }
+      function validNewChat(d) {
+        return d.keys().hasOnly(['members', 'names', 'createdBy', 'createdAt', 'readAt', 'typing'])
+          && d.members is list && d.members.size() == 2
+          && d.members[0] is string && d.members[1] is string
+          && d.members[0] < d.members[1]
+          && d.members[0] == d.members[0].lower() && d.members[1] == d.members[1].lower()
+          && d.members[0].size() <= 254 && d.members[1].size() <= 254
+          && myEmail() in d.members
+          && chatId == d.members[0] + '|' + d.members[1]
+          && d.createdBy == request.auth.uid && d.createdAt == request.time
+          && d.names is map && d.names.keys().hasOnly([myEmail()])
+          && d.get('readAt', {}) is map && d.get('typing', {}) is map;
+      }
+      function validLast(l) {
+        return l is map && l.keys().hasOnly(['text', 'from', 'at'])
+          && l.from == myEmail() && l.text is string && l.text.size() <= 200 && l.at == request.time;
+      }
+      allow read: if isMember(resource.data);
+      allow create: if validNewChat(request.resource.data);
+      allow update: if isMember(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last', 'readAt', 'typing', 'names'])
+        && onlyMine('readAt') && onlyMine('typing') && onlyMine('names')
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['last']) || validLast(request.resource.data.last));
+
+      match /messages/{messageId} {
+        function chatData() { return get(/databases/$(database)/documents/chats/$(chatId)).data; }
+        function inChat() { return hasEmail() && myEmail() in chatData().members; }
+        function validReply(d) {
+          return !('reply' in d) || (d.reply is map && d.reply.keys().hasOnly(['id', 'text', 'from'])
+            && d.reply.id is string && d.reply.text is string && d.reply.text.size() <= 300 && d.reply.from is string);
+        }
+        allow read: if inChat();
+        allow create: if inChat()
+          && request.resource.data.keys().hasOnly(['from', 'text', 'createdAt', 'reply'])
+          && request.resource.data.from == myEmail()
+          && request.resource.data.text is string && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 4000
+          && request.resource.data.createdAt == request.time
+          && validReply(request.resource.data);
+        // my own messages: edit the text, or delete it for everyone (it stays as "This message was deleted")
+        allow update: if inChat() && resource.data.from == myEmail() && resource.data.get('deleted', false) == false && (
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
+            && request.resource.data.text is string && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 4000
+            && request.resource.data.editedAt == request.time)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'deleted', 'reply', 'editedAt'])
+            && request.resource.data.deleted == true && request.resource.data.text == ''
+            && !('reply' in request.resource.data) && !('editedAt' in request.resource.data))
+        );
+        allow delete: if false;
+      }
+    }
+
+    // ---------- shared calendars ----------
+    // calendarShares/{ownerUid}_{email}: the owner shares their whole calendar (every to-do list they own, now and
+    // later) with that email, to see and change. The person it's for sees it (and marks it seen), or removes it.
+    match /calendarShares/{shareId} {
+      function validShare(d) {
+        return d.keys().hasOnly(['ownerUid', 'ownerEmail', 'ownerName', 'to', 'seen', 'createdAt'])
+          && d.ownerUid == request.auth.uid && d.ownerEmail == myEmail()
+          && d.ownerName is string && d.ownerName.size() <= 120
+          && d.to is string && d.to.size() >= 3 && d.to.size() <= 254 && d.to == d.to.lower() && d.to != myEmail()
+          && shareId == request.auth.uid + '_' + d.to
+          && d.seen == false && d.createdAt == request.time;
+      }
+      allow read: if hasEmail() && (resource.data.ownerUid == request.auth.uid || resource.data.to == myEmail());
+      allow create: if hasEmail() && validShare(request.resource.data);
+      allow update: if hasEmail() && resource.data.to == myEmail()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seen'])
+        && request.resource.data.seen is bool;
+      allow delete: if hasEmail() && (resource.data.ownerUid == request.auth.uid || resource.data.to == myEmail());
+    }
+
     match /activity/{activityId} {
       function mayActivity(kind, role) {
         return (kind in ['comment', 'comment-edit', 'comment-delete'] && canComment(role))
@@ -387,7 +481,7 @@ service cloud.firestore {
           && d.get('detail', '') is string && d.get('detail', '').size() <= 200
           && d.fromName is string && d.fromName.size() <= 120
           && d.fromEmail == myEmail() && d.seen == false && d.createdAt == request.time
-          && mayActivity(d.kind, roleIn(listData(d.listId)))
+          && mayActivity(d.kind, effRole(listData(d.listId)))
           && mayReceive(d.kind, listData(d.listId), d.to);
       }
 

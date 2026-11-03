@@ -53,6 +53,7 @@ export async function admin() {
       db: mods.firestore.getFirestore(),
       messaging: mods.messaging.getMessaging(),
       FieldValue: mods.firestore.FieldValue,
+      FieldPath: mods.firestore.FieldPath,
     };
   } catch (e) {
     return { error: `Firebase Admin couldn't start (${e.code || e.message}).` };
