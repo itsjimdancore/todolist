@@ -2558,3 +2558,33 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 .chat-shell.wide { grid-template-rows: minmax(0, 1fr); }
 .chat-shell > * { align-self: stretch; justify-self: stretch; min-height: 0; min-width: 0; width: 100%; max-width: none; }
 .chat-shell > .chat-list, .chat-shell > .chat-conv, .chat-shell > .chat-info, .chat-shell > .chat-welcome { flex: 1 1 auto; height: 100%; }
+
+/* ⋮ beside Share calendar: who can see your calendar, and Manage */
+.cal-share-more { position: relative; }
+.cal-share-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: min(320px, calc(100vw - 24px)); display: flex;
+  flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface); box-shadow: 0 16px 40px rgb(0 0 0 / .45); font-size: 14px; color: var(--muted); line-height: 1.45; }
+.cal-share-pop p { margin: 0; }
+.cal-share-pop b { color: var(--fg); overflow-wrap: anywhere; }
+.cal-share-pop .btn { align-self: flex-end; }
+
+/* phones: the sharing part (avatars, Share calendar, ⋮, calendars shared with you) is folded behind "Sharing" */
+.cal-sharing-toggle, .cal-sharing-m { display: none; }
+.cal-sharing-toggle { align-items: center; gap: 6px; position: relative; }
+.cal-sharing-dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+@media (max-width: 860px) {
+  .cal-sharing-toggle { display: inline-flex; }
+  .bar-right > .cal-share-btn { display: none; }
+  .cal-wrap:not(.sharing-open) .cal-shared { display: none; }
+  .cal-wrap.sharing-open .cal-sharing-m { display: flex; }
+  .cal-sharing-m .cal-share-btn { flex-wrap: wrap; }
+  .cal-sharing-m .cal-share-pop { left: auto; right: 0; }
+}
+
+/* phones: the month title and Today side by side on one line ("November 2026 ▾ … Today ‹ ›") */
+@media (max-width: 560px) {
+  .cal-hbar-l { flex-wrap: nowrap; }
+  .cal-hbar h2 { order: -1; flex: 1 1 auto; flex-basis: auto; min-width: 0; overflow: hidden; }
+  .cal-hbar .cal-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .cal-hbar .cal-today { margin-right: 0; margin-left: 4px; }
+}

@@ -111,6 +111,9 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
   const q = query.trim().toLowerCase();
   const [hiddenOwners, setHiddenOwners] = useState(() => new Set()); // shared calendars switched off
   const [sharing, setSharing] = useState(false); // the Share calendar window
+  const [shareOpen, setShareOpen] = useState(false); // phones: the sharing part is folded away until tapped
+  const shareCount = (shares || []).length + withMe.length;
+  const shareNew = withMe.some((c) => !c.share.seen);
   const visibleLists = lists.filter((l) => !hidden.has(l.id) && !(l.calOwnerUid && hiddenOwners.has(l.calOwnerUid)));
   const entries = taskEntries(visibleLists, byList).filter((e) => !q || e.t.text.toLowerCase().includes(q));
   const manual = (a, b) => order.get(a.l.id) - order.get(b.l.id) || toDate(a.t.createdAt) - toDate(b.t.createdAt);
@@ -389,19 +392,28 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
   );
 
   return (
-    <div className={preview?.kind ? 'cal-wrap dragging' : 'cal-wrap'}>
+    <div className={['cal-wrap', preview?.kind && 'dragging', shareOpen && 'sharing-open'].filter(Boolean).join(' ')}>
       <header className="bar">
         <div className="bar-left">
           <h1>Calendar</h1>
           <div className="meta">Tasks with a due date, from every list you can open{withMe.length ? ' and every calendar shared with you' : ''}</div>
         </div>
         <div className="bar-right">
+          {/* phones: one button that unfolds the sharing part (closed by default) */}
+          <button type="button" className={shareOpen ? 'btn cal-sharing-toggle on' : 'btn cal-sharing-toggle'}
+            onClick={() => setShareOpen((o) => !o)} aria-expanded={shareOpen} aria-controls="cal-sharing">
+            Sharing{shareCount > 0 && <span className="cal-count">{shareCount}</span>}
+            {shareNew && !shareOpen && <i className="cal-sharing-dot" aria-label="New" />}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={shareOpen ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} /></svg>
+          </button>
           <ShareCalendarButton user={user} shares={shares} contacts={contacts} onOpen={() => setSharing(true)} />
         </div>
       </header>
 
-      <SharedCalendarsBar user={user} shares={shares} withMe={withMe} hiddenOwners={hiddenOwners} setHiddenOwners={setHiddenOwners}
-        onShare={() => setSharing(true)} />
+      <div id="cal-sharing" className="cal-sharing-m">
+        <ShareCalendarButton user={user} shares={shares} contacts={contacts} onOpen={() => setSharing(true)} />
+      </div>
+      <SharedCalendarsBar user={user} withMe={withMe} hiddenOwners={hiddenOwners} setHiddenOwners={setHiddenOwners} />
       {sharing && <ShareCalendarDialog user={user} shares={shares || []} contacts={contacts} onClose={() => setSharing(false)} />}
 
       {/* Toolbar: Search · Filter · Sort · No date · + New task */}

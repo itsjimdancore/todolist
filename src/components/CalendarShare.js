@@ -15,22 +15,54 @@ const PeopleIcon = () => (
 );
 
 // The "Share calendar" button for the Calendar's header: who it's shared with (the same avatars as on a list:
-// hover or tap for name, email and last active), and the window to add or remove people.
+// hover or tap for name, email and last active), the window to add or remove people, and a ⋮ beside it
+// saying who can see the calendar (with Manage).
 export function ShareCalendarButton({ user, shares, contacts, onOpen }) {
   const people = (shares || []).map((s) => ({ email: s.to, displayName: contacts.find((c) => c.email === s.to)?.displayName }));
+  const [menu, setMenu] = useState(false);
+  const box = useRef(null);
+  useEffect(() => {
+    if (!menu) return undefined;
+    const down = (e) => !box.current?.contains(e.target) && setMenu(false);
+    const key = (e) => e.key === 'Escape' && setMenu(false);
+    document.addEventListener('pointerdown', down);
+    document.addEventListener('keydown', key);
+    return () => { document.removeEventListener('pointerdown', down); document.removeEventListener('keydown', key); };
+  }, [menu]);
+  const names = people.map((p) => p.email);
   return (
     <div className="cal-share-btn">
       {people.length > 0 && <PeopleStack people={people} me={user} max={4} />}
       <button type="button" className="btn" onClick={onOpen}>
         <PeopleIcon />Share calendar
       </button>
+      {names.length > 0 && (
+        <div className="cal-share-more" ref={box}>
+          <button type="button" className="btn sq" onClick={() => setMenu((o) => !o)} aria-expanded={menu}
+            aria-label="Who can see your calendar" title="Who can see your calendar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <circle cx="12" cy="5" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="12" cy="19" r="1.8" />
+            </svg>
+          </button>
+          {menu && (
+            <div className="cal-share-pop" role="dialog" aria-label="Who can see your calendar">
+              <span className="cal-shared-ic"><PeopleIcon /></span>
+              <p>
+                Your calendar is shared with <b>{names.length === 1 ? names[0] : `${names.length} people`}</b>.
+                {' '}They can see every month and year, and add, change and tick off what&apos;s on it.
+              </p>
+              <button type="button" className="btn small primary" onClick={() => { setMenu(false); onOpen(); }}>Manage</button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-// The strip at the top of the Calendar: who can see mine, and the calendars shared with me (each can be
-// shown or hidden, or removed from my Calendar)
-export function SharedCalendarsBar({ user, shares, withMe, hiddenOwners, setHiddenOwners, onShare }) {
+// The strip at the top of the Calendar: the calendars shared with me (each can be shown or hidden, or removed
+// from my Calendar). Who can see mine is in the ⋮ beside Share calendar.
+export function SharedCalendarsBar({ user, withMe, hiddenOwners, setHiddenOwners }) {
   const toast = useToast();
   // a calendar newly shared with me: it's been seen once it's shown here
   const unseen = withMe.filter((c) => !c.share.seen).map((c) => c.share.ownerUid).join();
@@ -40,7 +72,7 @@ export function SharedCalendarsBar({ user, shares, withMe, hiddenOwners, setHidd
   useEffect(() => {
     if (unseen) unseen.split(',').forEach((uid) => markCalendarSeen(uid, emailOf(user)).catch(() => {}));
   }, [unseen, user]);
-  if (!(shares || []).length && !withMe.length) return null;
+  if (!withMe.length) return null;
   const toggle = (uid) => setHiddenOwners((h) => {
     const next = new Set(h);
     if (next.has(uid)) next.delete(uid); else next.add(uid);
@@ -49,20 +81,8 @@ export function SharedCalendarsBar({ user, shares, withMe, hiddenOwners, setHidd
   const remove = (c) => unshareCalendar(c.share.ownerUid, emailOf(user))
     .then(() => toast(`${c.share.ownerName || c.share.ownerEmail}'s calendar removed`))
     .catch((e) => toast(friendlyError(e), 'err'));
-  const names = (shares || []).map((s) => s.to);
-
   return (
     <div className="cal-shared">
-      {names.length > 0 && (
-        <div className="cal-shared-i mine">
-          <span className="cal-shared-ic"><PeopleIcon /></span>
-          <span className="cal-shared-t">
-            Your calendar is shared with <b>{names.length === 1 ? names[0] : `${names.length} people`}</b>.
-            {' '}They can see every month and year, and add, change and tick off what&apos;s on it.
-          </span>
-          <button type="button" className="link" onClick={onShare}>Manage</button>
-        </div>
-      )}
       {withMe.map((c) => {
         const name = c.share.ownerName || c.share.ownerEmail;
         const shown = !hiddenOwners.has(c.share.ownerUid);
