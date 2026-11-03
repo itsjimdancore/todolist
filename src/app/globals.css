@@ -2552,3 +2552,9 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 .chat-shell .chat-list { max-width: none; border: none; border-radius: 0; }
 .chat-shell .chat-list-h { padding-top: 14px; }
 @media (max-width: 860px) { .main > .chat-shell { margin: -16px 0 0; } }
+
+/* every pane of the chat stretches to the full height and width it's given (older rules centred them) */
+.main > .chat-shell { flex: 1 1 auto; min-height: 0; width: 100%; max-width: none; }
+.chat-shell.wide { grid-template-rows: minmax(0, 1fr); }
+.chat-shell > * { align-self: stretch; justify-self: stretch; min-height: 0; min-width: 0; width: 100%; max-width: none; }
+.chat-shell > .chat-list, .chat-shell > .chat-conv, .chat-shell > .chat-info, .chat-shell > .chat-welcome { flex: 1 1 auto; height: 100%; }
