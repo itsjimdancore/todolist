@@ -21,10 +21,10 @@ const listName = (l) => (isUnplaced(l) ? UNPLACED_TITLE : l.title);
 
 // Clicking a day on the Calendar: everything happening that day, as a numbered table
 // (#, Task: title · what's going to be done · location, Link, Date + time, Added by, Status), and a form to add
-// something to it. An empty day opens straight on the form.
+// something to it. An empty day shows that it's empty, with an Add button in the middle.
 // items: [{ t, l }] on that day · lists: lists a task can be added to · actions: the Calendar's task actions
 export default function DaySheet({ day, items, holiday, lists, user, actions, init, panelOpen, onDay, onExisting, onClose }) {
-  const [adding, setAdding] = useState(() => !!init || items.length === 0);
+  const [adding, setAdding] = useState(() => !!init);
   const [confirm, setConfirm] = useState(null); // 'listId/taskId' waiting for "Delete?"
   const today = todayKey();
 
@@ -37,7 +37,7 @@ export default function DaySheet({ day, items, holiday, lists, user, actions, in
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose, panelOpen, confirm]);
 
-  const count = `${items.length} ${items.length === 1 ? 'activity' : 'activities'}`;
+  const count = items.length ? `${items.length} ${items.length === 1 ? 'activity' : 'activities'}` : 'No activities yet';
 
   return (
     <div className="scrim ds-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -56,8 +56,8 @@ export default function DaySheet({ day, items, holiday, lists, user, actions, in
         {adding ? (
           <AddForm key={day} day={day} init={init} lists={lists} user={user}
             onExisting={onExisting}
-            onCancel={items.length ? () => setAdding(false) : onClose}
-            cancelLabel={items.length ? 'Back to the day' : 'Cancel'}
+            onCancel={() => setAdding(false)}
+            cancelLabel="Back to the day"
             onSaved={(due) => {
               if (!due) return onClose();
               setAdding(false);
@@ -66,6 +66,19 @@ export default function DaySheet({ day, items, holiday, lists, user, actions, in
         ) : (
           <>
             <div className="m-b ds-b">
+              {items.length === 0 ? (
+                <div className="ds-empty">
+                  <span className="ds-empty-ic" aria-hidden="true">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5" />
+                    </svg>
+                  </span>
+                  <h3>Nothing planned{day === today ? ' today' : ' on this day'}</h3>
+                  <p>Add what&apos;s happening: a task, a plan, an outing. You can put it in a list or leave it unplaced.</p>
+                  <button type="button" className="btn primary ds-empty-add" onClick={() => setAdding(true)} autoFocus>+ Add an activity</button>
+                </div>
+              ) : (
+              <>
               <div className="ds-tools">
                 <p className="ds-hint">Click a task to see everything about it and change it.</p>
                 <button type="button" className="btn primary" onClick={() => setAdding(true)}>+ Add an activity</button>
@@ -79,6 +92,8 @@ export default function DaySheet({ day, items, holiday, lists, user, actions, in
                     confirming={confirm === `${e.l.id}/${e.t.id}`} setConfirm={setConfirm} />
                 ))}
               </ol>
+              </>
+              )}
             </div>
           </>
         )}

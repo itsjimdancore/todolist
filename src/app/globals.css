@@ -2193,3 +2193,16 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
   .up-acts { width: 100%; padding-left: 30px; }
   .up-place { flex: 1; }
 }
+
+/* Day sheet: an empty day, with the Add button in the middle */
+.ds-empty { flex: 1; min-height: 280px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: 32px 16px; text-align: center; border: 1px dashed var(--line); border-radius: 14px; }
+.ds-empty-ic { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; color: var(--accent);
+  background: var(--accent-soft); border: 1px solid rgb(79 194 176 / .35); }
+.ds-empty h3 { margin: 6px 0 0; font-size: 18px; }
+.ds-empty p { margin: 0; max-width: 36ch; font-size: 14px; color: var(--muted); }
+.ds-empty-add { margin-top: 8px; height: 44px; padding: 0 22px; font-size: 15px; }
+@media (max-width: 860px) {
+  .ds-empty { min-height: 46dvh; border: none; padding: 24px 8px; }
+  .ds-empty-add { width: min(320px, 100%); height: 48px; }
+}
