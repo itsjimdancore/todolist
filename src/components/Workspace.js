@@ -77,6 +77,7 @@ function WorkspaceInner({ user }) {
   const [creating, setCreating] = useState(false); // false | 'list' | 'letter'
   const [showArchived, setShowArchived] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [backFrom, setBackFrom] = useState(null); // the page Back returns to (names the ‹ button on phones)
   const restored = useRef(false);
   const goingAway = useRef(null); // list I'm deleting or leaving on purpose, so it doesn't count as "access removed"
   const menuBtn = useRef(null);
@@ -230,15 +231,50 @@ function WorkspaceInner({ user }) {
     }
   }, [activity, activeId, view]);
 
-  // ---- remember the open list and view in the address bar, and the list in the database
+  // ---- remember the open list and view in the address bar, and the list in the database.
+  // Going to another page (or opening a different list) adds a step to the browser history, so the phone's
+  // Back button / swipe-back, and the ‹ back button in the top bar, return to where you were instead of
+  // leaving the app. Other changes (the list being picked on first load, Back itself) just update the address.
+  const nav = useRef({ ready: false, popping: false, view: null, list: null });
   useEffect(() => {
     const url = new URL(window.location.href);
     if (activeId) url.searchParams.set('list', activeId);
     if (['board', 'calendar', 'notifications', 'letters', 'music'].includes(view)) url.searchParams.set('view', view);
     else url.searchParams.delete('view');
-    window.history.replaceState(null, '', url);
+    const n = nav.current;
+    const moved = n.ready && !n.popping && (view !== n.view || (view === 'list' && activeId !== n.list && n.list));
+    const st = window.history.state || {};
+    const from = moved ? n.view : st.from || null;
+    if (moved) window.history.pushState({ app: true, depth: (st.depth || 0) + 1, from }, '', url);
+    else window.history.replaceState({ app: true, depth: st.depth || 0, from }, '', url);
+    setBackFrom(from);
+    n.ready = true; n.popping = false; n.view = view; n.list = activeId;
     if (activeId) saveLastListId(user.uid, activeId).catch(() => {});
   }, [activeId, view, user.uid]);
+
+  // Back (phone button, swipe, or the browser's): show the page the address now points at
+  useEffect(() => {
+    const onPop = () => {
+      const list = new URLSearchParams(window.location.search).get('list');
+      const to = initialView();
+      const n = nav.current;
+      // only mark it as Back if something will change (otherwise the next real move would be mistaken for it)
+      if (to !== n.view || (list && list !== n.list)) n.popping = true;
+      setMenuOpen(false);
+      setView(to);
+      if (list) setActiveId(list);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // the ‹ back button in the phone top bar: one step back if we came from somewhere in the app,
+  // otherwise (opened from a link) up to the page this one belongs to
+  function goBack() {
+    if ((window.history.state?.depth || 0) > 0) return window.history.back();
+    nav.current.popping = true; // replace, so Back from there leaves the app as expected
+    setView(active?.kind === 'letter' ? 'letters' : 'board');
+  }
 
   // ---- if the open list disappears (deleted, or my access was removed), move on.
   // A letter that disappears goes back to the Love letters page rather than into some to-do list.
@@ -316,6 +352,11 @@ function WorkspaceInner({ user }) {
   }
 
   const active = lists?.find((l) => l.id === activeId) || null;
+  // phones: the ‹ back button's name (none on My List, the home page). Named after the page Back returns to,
+  // or the page this one belongs to when it was opened straight from a link.
+  const PAGE_NAMES = { board: 'My List', calendar: 'Calendar', letters: 'Love letters', music: 'Music', notifications: 'Notifications' };
+  const backLabel = view === 'board' ? null
+    : PAGE_NAMES[backFrom] || (backFrom === 'list' ? 'Back' : active?.kind === 'letter' && view === 'list' ? 'Love letters' : 'My List');
   const dialogList = dialog && lists?.find((l) => l.id === dialog.id);
   // My own drag order once I've set one (new lists go after it), else favourites first; most recently changed breaks ties
   const arrange = (arr) =>
@@ -365,7 +406,14 @@ function WorkspaceInner({ user }) {
             aria-expanded={menuOpen} aria-controls="side-body" aria-label="Open menu">
             <span aria-hidden="true" />
           </button>
-          <div className="brand"><Emblem size={28} /><span className="brand-name">Shared To-Do</span></div>
+          {/* phones: anywhere but My List, a ‹ back button (named after where you came from) takes the brand's place */}
+          {backLabel && (
+            <button className="top-back only-mobile" type="button" onClick={goBack} aria-label={`Back to ${backLabel}`}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+              <span>{backLabel}</span>
+            </button>
+          )}
+          <div className={backLabel ? 'brand has-back' : 'brand'}><Emblem size={28} /><span className="brand-name">Shared To-Do</span></div>
           <Notifications api={notif} user={user} onOpen={openNote} onViewAll={showNotifications} />
           <button className="side-btn collapse only-desktop" type="button" onClick={toggleRail}
             aria-label={rail ? 'Expand sidebar' : 'Collapse sidebar'} title={rail ? 'Expand sidebar' : 'Collapse sidebar'}>

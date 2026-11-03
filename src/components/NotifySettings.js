@@ -30,9 +30,12 @@ function Switch({ on, onChange, disabled, label }) {
   );
 }
 
+// tapping anywhere on the row flips its switch (easier on a phone than hitting the switch itself)
 function Row({ title, hint, children }) {
   return (
-    <div className="ns-row">
+    <div className="ns-row can-tap" onClick={(e) => {
+      if (!e.target.closest('button, a, input')) e.currentTarget.querySelector('.sw:not(:disabled)')?.click();
+    }}>
       <div className="ns-t"><b>{title}</b>{hint && <span>{hint}</span>}</div>
       {children}
     </div>
