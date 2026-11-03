@@ -473,6 +473,8 @@ button.music-next:hover b { color: var(--accent); }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); min-width: 0; }
 .panel-h { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); gap: 8px; }
 .count { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Tasks heading + "Add a task" stay at the top of the scrolling page while the tasks move under them */
+.lv-tasks-top { position: sticky; top: 0; z-index: 5; background: var(--surface); border-radius: var(--r) var(--r) 0 0; }
 .add-form { border-bottom: 1px solid var(--line); }
 .add { display: flex; gap: 8px; padding: 12px 16px; }
 /* the optional extras slide open under "Add a task" once something's typed */
@@ -1534,6 +1536,12 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .modal.task-modal { width: min(480px, 100%); max-height: calc(100dvh - 32px); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
 .td-title { padding: 2px 4px; margin: -2px -4px; border: none; border-radius: 6px; background: none; color: inherit; font: inherit; text-align: left; overflow-wrap: anywhere; cursor: text; }
 .td-title:hover { background: var(--sunk); }
+/* editing the title: the same title, its text editable where it sits (like editing a comment), no buttons */
+.td-title-edit { flex: 1; display: block; width: 100%; min-width: 0; min-height: 0; height: auto; line-height: inherit; resize: none; overflow: hidden;
+  field-sizing: content; background: var(--surface); box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft); }
+.td-title-edit:hover { background: var(--surface); }
+.td-title-edit:focus-visible { outline: none; }
+.task-modal .td-title-edit, .cal-panel .td-title-edit { font-size: inherit; } /* keep the title's size (it's already 20px, so iPhone won't zoom) */
 .td-title-in { flex: 1; min-width: 0; font-family: var(--display); font-size: 18px; font-weight: 600; }
 .td-loc .field-top > span { color: var(--muted); }
 .td-loc-in { position: relative; display: flex; align-items: center; }

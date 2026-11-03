@@ -198,14 +198,17 @@ export default function ListView({ list, role, user, contacts, onLeave, onDelete
       <div className="page-body">
       <div className={`${comment ? 'grid' : 'grid solo'} show-${pane}`}>
         <section className="panel lv-tasks">
-          <div className="panel-h">
-            <h2>Tasks</h2>
-            <span className="count">{tasks ? `${active.filter((t) => t.done).length}/${active.length} done` : ''}</span>
-          </div>
+          {/* the heading and "Add a task" stay pinned while the tasks scroll under them */}
+          <div className="lv-tasks-top">
+            <div className="panel-h">
+              <h2>Tasks</h2>
+              <span className="count">{tasks ? `${active.filter((t) => t.done).length}/${active.length} done` : ''}</span>
+            </div>
 
-          {write && (
-            <AddTask list={list} user={user} />
-          )}
+            {write && (
+              <AddTask list={list} user={user} />
+            )}
+          </div>
 
           <ul className="tasks">
             {tasks === null && <li className="empty"><Loading hint="Getting your tasks" /></li>}

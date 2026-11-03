@@ -52,22 +52,34 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
   );
 }
 
-// The task's wording: click to change it (write access), Enter or click away saves, Esc puts it back
+// The task's wording: click it (write access) and the title itself becomes editable where it sits, looking the
+// same, with the cursor at the end, like editing a comment. No buttons: Enter (or the phone keyboard's Done) saves,
+// clicking or tapping anywhere outside it saves and closes, Esc puts it back.
 function TitleField({ value, canEdit, onSave }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(value);
   useEffect(() => { if (!editing) setText(value); }, [value, editing]);
   if (!canEdit) return <span>{value}</span>;
   function save() {
-    const v = text.trim();
+    const v = text.replace(/\s+/g, ' ').trim();
     setEditing(false);
     if (v && v !== value) onSave(v);
     else setText(value);
   }
+  // grows with the text (field-sizing where supported, by hand elsewhere)
+  const grow = (el) => {
+    if (!el || (typeof CSS !== 'undefined' && CSS.supports?.('field-sizing', 'content'))) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
   return editing ? (
-    <input className="td-title-in" autoFocus maxLength={500} value={text} onChange={(e) => setText(e.target.value)} onBlur={save}
-      aria-label="Task" onKeyDown={(e) => {
-        if (e.key === 'Enter') save();
+    <textarea className="td-title td-title-edit" ref={grow} autoFocus rows={1} maxLength={500} value={text}
+      enterKeyHint="done" aria-label="Task" spellCheck
+      onFocus={(e) => e.target.setSelectionRange(e.target.value.length, e.target.value.length)}
+      onChange={(e) => { setText(e.target.value.replace(/\n/g, ' ')); grow(e.target); }}
+      onBlur={save}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } // blur runs save
         if (e.key === 'Escape') { e.stopPropagation(); setText(value); setEditing(false); }
       }} />
   ) : (
