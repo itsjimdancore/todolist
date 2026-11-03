@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { DEFAULT_MINS, DURATIONS, TIMES, durLabel, isOverdue, timeRange } from '@/lib/dates';
+import { DEFAULT_MINS, fromMin, isOverdue, timeRange, toMin } from '@/lib/dates';
 import { colorFor } from '@/lib/people';
 import DuePicker from './DuePicker';
 import Select from './Select';
@@ -174,9 +174,24 @@ function TrashIcon() {
   );
 }
 
-// "All day" or a start time + length
+// The time on a task, the same everywhere it's set: All day, or From and To, each a clock time with AM / PM.
+// Saved as start 'HH:MM' + length in minutes. Changing From keeps the length; a To before From is held
+// (and pointed out) until it's fixed, so a broken time is never saved.
 export function TimeFields({ start, mins, onChange, idPrefix }) {
   const allDay = !start;
+  const from = start ? toMin(start) : 9 * 60;
+  const to = Math.min(from + (mins || DEFAULT_MINS), 1440);
+  const [badTo, setBadTo] = useState(null);
+  useEffect(() => setBadTo(null), [start, mins]);
+  const emit = (f, t) => onChange({ start: fromMin(f), mins: t - f });
+  const setFrom = (f) => {
+    const t = Math.min(f + (to - from), 1440);
+    emit(f, t > f ? t : Math.min(f + DEFAULT_MINS, 1440));
+  };
+  const setTo = (v) => {
+    const t = v === 0 ? 1440 : v; // 12:00 AM as an end time = midnight, the end of the day
+    if (t > from) { setBadTo(null); emit(from, t); } else setBadTo(t);
+  };
   return (
     <div className="time-fields">
       <label className="chk">
@@ -185,14 +200,36 @@ export function TimeFields({ start, mins, onChange, idPrefix }) {
         All day
       </label>
       {!allDay && (
-        <>
-          <Select id={`${idPrefix}-start`} className="time-sel" value={start} onChange={(v) => onChange({ start: v, mins })} label="Start time"
-            options={(TIMES.includes(start) ? TIMES : [start, ...TIMES]).map((t) => ({ value: t, label: t }))} />
-          <span className="time-for">for</span>
-          <Select id={`${idPrefix}-mins`} className="time-sel" value={mins} onChange={(v) => onChange({ start, mins: v })} label="Length"
-            options={(DURATIONS.includes(mins) ? DURATIONS : [mins, ...DURATIONS]).map((d) => ({ value: d, label: durLabel(d) }))} />
-        </>
+        <div className="tf-range">
+          <span className="tf-l">From</span>
+          <ClockInput value={from} onChange={setFrom} id={`${idPrefix}-from`} label="From" />
+          <span className="tf-l">To</span>
+          <ClockInput value={badTo ?? to} onChange={setTo} id={`${idPrefix}-to`} label="To" invalid={badTo != null} />
+        </div>
       )}
+      {!allDay && badTo != null && <p className="note err tf-err" role="alert">The To time has to be after the From time.</p>}
     </div>
+  );
+}
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const CLOCK = Array.from({ length: 48 }, (_, i) => i * 15); // 12:00, 12:15 … 11:45 (minutes into the half day)
+const clockLabel = (c) => `${Math.floor(c / 60) || 12}:${pad2(c % 60)}`;
+
+// One time of day: the clock time, then AM | PM. value: minutes after midnight (1440 shows as 12:00 AM).
+function ClockInput({ value, onChange, id, label, invalid }) {
+  const v = value % 1440;
+  const pm = v >= 720;
+  const clock = v % 720;
+  const opts = CLOCK.includes(clock) ? CLOCK : [...CLOCK, clock].sort((a, b) => a - b);
+  return (
+    <span className={invalid ? 'clock bad' : 'clock'} role="group" aria-label={`${label} time`}>
+      <Select id={id} className="time-sel" value={clock} onChange={(c) => onChange(c + (pm ? 720 : 0))} label={`${label} time`}
+        options={opts.map((c) => ({ value: c, label: clockLabel(c) }))} />
+      <span className="seg ampm" role="group" aria-label={`${label}: AM or PM`}>
+        <button type="button" className={pm ? '' : 'on'} aria-pressed={!pm} onClick={() => onChange(clock)}>AM</button>
+        <button type="button" className={pm ? 'on' : ''} aria-pressed={pm} onClick={() => onChange(clock + 720)}>PM</button>
+      </span>
+    </span>
   );
 }

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   MAX_REMINDER_IDS, addComment, dismissActivity, dismissInvite, dismissLog, markActivitySeen, markInviteSeen, markLogSeen, saveReminderState, watchReminderState,
 } from '@/lib/data';
-import { addDays, dueLabel, fromKey, timeRange, todayKey } from '@/lib/dates';
+import { addDays, dueLabel, fromKey, time12, timeRange, todayKey } from '@/lib/dates';
 import { friendlyError } from '@/lib/firebase';
 import { canComment, roleLabel } from '@/lib/permissions';
 import { ACT, didText, isComment, notifyCopy, who } from '@/lib/activityText';
@@ -244,7 +244,7 @@ function Headline({ n }) {
     return <><b>{who(n)}</b> {didText(n)} {n.letter && n.kind !== 'list-create' ? 'the love letter ' : ''}<b>“{n.listTitle}”</b></>;
   }
   if (n.kind === 'due') {
-    return <><b>“{n.task.text}”</b> is due today{n.task.start ? ` at ${n.task.start}` : ''}</>;
+    return <><b>“{n.task.text}”</b> is due today{n.task.start ? ` at ${time12(n.task.start)}` : ''}</>;
   }
   const days = Math.round((fromKey(todayKey()) - fromKey(n.task.due)) / 86_400_000);
   return <><b>“{n.task.text}”</b> is overdue by {days} day{days > 1 ? 's' : ''}</>;

@@ -42,7 +42,8 @@ export function Hl({ text = '', q }) {
 }
 
 // Every list I can open, as cards in a 3-column grid. On "All lists" the cards can be dragged into my own order.
-export default function Board({ lists, tasksByList, favorites, actions, onOpen, onNew, onReorder }) {
+// top: shown above the cards on All lists (the Unplaced tasks)
+export default function Board({ lists, tasksByList, favorites, actions, onOpen, onNew, onReorder, top = null }) {
   const [tab, setTab] = useState('active');
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
@@ -172,6 +173,8 @@ export default function Board({ lists, tasksByList, favorites, actions, onOpen, 
       ) : shown.length === 0 && tab !== 'active' ? (
         <div className="muted board-empty">{TABS[tab].empty}</div>
       ) : (
+        <>
+        {tab === 'active' && top}
         <div className={drag?.id ? 'board is-dragging' : 'board'}>
           {visible.map((l) => (
             <BoardCard key={l.id} list={l} tasks={tasksByList[l.id]} favorite={favorites.has(l.id)} actions={actions} onOpen={onOpen}
@@ -186,6 +189,7 @@ export default function Board({ lists, tasksByList, favorites, actions, onOpen, 
             </button>
           )}
         </div>
+        </>
       )}
       </div>
     </div>

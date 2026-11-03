@@ -195,6 +195,32 @@ export async function createList(user, title, kind = 'list') {
 
 export const createLetter = (user, title) => createList(user, title, 'letter');
 
+// "Unplaced": where a task goes when it's added (from the Calendar) without picking a list. It's an ordinary
+// list of my own, never shared, with a fixed id, so the app can tell it apart. My List shows its tasks in their
+// own section (from there they can be placed in a list); the sidebar and the list cards leave it out.
+export const UNPLACED_TITLE = 'Unplaced';
+export const unplacedId = (uid) => `unplaced-${uid}`;
+export const isUnplaced = (list) => !!list?.id?.startsWith('unplaced-');
+
+// The Unplaced list's id, making it the first time it's needed. exists: it's already among my lists.
+export async function ensureUnplaced(user, exists) {
+  const id = unplacedId(user.uid);
+  if (exists) return id;
+  await setDoc(listRef(id), {
+    title: UNPLACED_TITLE,
+    kind: 'list',
+    ownerId: user.uid,
+    ownerEmail: emailOf(user),
+    ownerName: nameOf(user),
+    roles: {},
+    memberEmails: [],
+    leftEmails: [],
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return id;
+}
+
 // The owner, and Write / Read & write recipients, can change what the letter says.
 // tell: let the other person know (the letter view does this once per visit, not on every autosave)
 export function saveLetterBody(list, user, body, tell = false) {
@@ -338,13 +364,13 @@ const stamp = (user) => ({ updatedAt: serverTimestamp(), updatedBy: user.uid, up
 // due: optional 'YYYY-MM-DD' (see lib/dates.js); notes: optional details of what's going to be done;
 // time: optional { start: 'HH:MM', mins } on that day (no time = all day)
 // list: the list it goes in (just { id } for a list nobody else is on yet)
-// extra (optional): { location, links: [{ url, title }] }
+// extra (optional): { location, links: [{ url, title }], done }
 export function addTask(list, user, text, due = null, notes = '', time = null, extra = {}) {
   const listId = list.id;
   const b = writeBatch(db());
   b.set(doc(tasksCol(listId)), {
     text,
-    done: false,
+    done: !!extra.done,
     archived: false,
     ...(due ? { due } : {}),
     ...(notes ? { notes } : {}),
@@ -391,6 +417,18 @@ export const addTaskLink = (list, task, user, link) =>
   updateTask(list, task, user, { links: arrayUnion(link) }, 'task-link', link.title || link.url);
 export const removeTaskLink = (list, task, user, link) =>
   updateTask(list, task, user, { links: arrayRemove(link) }, 'task-unlink', link.title || link.url);
+
+// Move a task to another list (placing an Unplaced task): the same task in the new list, gone from the old one.
+// Its comments-free fields come along as they are; it counts as added to the new list.
+export function moveTask(from, task, to, user) {
+  const { id, ...fields } = task;
+  const b = writeBatch(db());
+  b.set(doc(tasksCol(to.id)), { ...fields, createdBy: user.uid, createdByName: fields.createdByName || nameOf(user), ...stamp(user) });
+  b.delete(doc(tasksCol(from.id), id));
+  b.update(listRef(to.id), { updatedAt: serverTimestamp() });
+  notify(b, to, user, 'task-add', { text: task.text, detail: task.due || '' });
+  return send(b);
+}
 
 export function deleteTask(list, task, user) {
   const b = writeBatch(db());

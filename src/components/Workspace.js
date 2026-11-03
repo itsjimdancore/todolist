@@ -9,6 +9,7 @@ import {
   deleteList,
   emailOf,
   getLastListId,
+  isUnplaced,
   leaveList,
   markActivitySeen,
   markInviteSeen,
@@ -32,6 +33,7 @@ import { roleLabel } from '@/lib/permissions';
 import { pausePush, refreshPush } from '@/lib/push';
 import { Avatar, colorFor, displayName, toDate } from '@/lib/people';
 import Board from './Board';
+import Unplaced from './Unplaced';
 import Calendar, { dueNowCount, taskEntries, useAllTasks } from './Calendar';
 import Emblem from './Emblem';
 import ListDialog from './ListDialogs';
@@ -199,7 +201,7 @@ function WorkspaceInner({ user }) {
       const fromUrl = new URLSearchParams(window.location.search).get('list');
       const last = await getLastListId(user.uid).catch(() => null);
       const pick =
-        lists.find((l) => l.id === fromUrl)?.id || lists.find((l) => l.id === last)?.id || lists.find((l) => l.kind !== 'letter')?.id || null;
+        lists.find((l) => l.id === fromUrl)?.id || lists.find((l) => l.id === last)?.id || lists.find((l) => l.kind !== 'letter' && !isUnplaced(l))?.id || null;
       if (fromUrl && !lists.some((l) => l.id === fromUrl)) {
         toast("That list isn't shared with this account. Sign in with the email it was sent to.", 'err');
         setView('board');
@@ -301,7 +303,7 @@ function WorkspaceInner({ user }) {
     const letter = activeWasLetter.current;
     if (goingAway.current !== activeId) toast(`You no longer have access to that ${letter ? 'letter' : 'list'}.`);
     if (letter && view === 'list') setView('letters');
-    setActiveId(lists.find((l) => l.kind !== 'letter')?.id ?? null);
+    setActiveId(lists.find((l) => l.kind !== 'letter' && !isUnplaced(l))?.id ?? null);
   }, [lists, activeId, toast, view]);
 
   // Step off the list first, so its tasks and comments stop listening before it goes away
@@ -310,7 +312,7 @@ function WorkspaceInner({ user }) {
     const wasActive = activeId === list.id;
     const wasView = view;
     if (wasActive && list.kind === 'letter' && view === 'list') setView('letters');
-    if (wasActive) setActiveId(lists.find((l) => l.id !== list.id && l.kind !== 'letter')?.id ?? null);
+    if (wasActive) setActiveId(lists.find((l) => l.id !== list.id && l.kind !== 'letter' && !isUnplaced(l))?.id ?? null);
     try {
       await work();
       toast(okMsg);
@@ -380,14 +382,18 @@ function WorkspaceInner({ user }) {
       ? [...arr].sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity) || 0)
       : [...arr].sort((a, b) => favorites.has(b.id) - favorites.has(a.id));
   // Love letters live on their own page; every to-do view (My List, Calendar, the sidebar) leaves them out
-  const todoLists = useMemo(() => (lists || []).filter((l) => l.kind !== 'letter'), [lists]);
+  // Unplaced (tasks added from the Calendar without a list) is a list of its own behind the scenes: it shows as its
+  // own section on My List and in the Calendar, never as a list card or in the sidebar
+  const todoLists = useMemo(() => (lists || []).filter((l) => l.kind !== 'letter' && !isUnplaced(l)), [lists]);
+  const unplaced = useMemo(() => (lists || []).find((l) => isUnplaced(l) && l.ownerId === user.uid) || null, [lists, user.uid]);
   const letters = useMemo(() => (lists || []).filter((l) => l.kind === 'letter'), [lists]);
   const arranged = arrange(todoLists);
   // Tasks of every open list, live: the calendar shows them, the sidebar counts what's due
   const openLists = arranged.filter((l) => !l.archived);
+  const calLists = unplaced ? [...openLists, unplaced] : openLists;
   // every list's tasks (archived too, so My List can search them); the calendar only uses the open lists'
-  const allTasks = useAllTasks(arranged);
-  const dueNow = dueNowCount(taskEntries(openLists, allTasks));
+  const allTasks = useAllTasks(unplaced ? [...arranged, unplaced] : arranged);
+  const dueNow = dueNowCount(taskEntries(calLists, allTasks));
   // Shares + due / overdue reminders, for the bell and the Notifications page
   const notif = useNotifications({ invites, activity, log, me, user, lists, tasksByList: allTasks, uid: user.uid, openListId: view === 'list' ? activeId : null });
   const showNotifications = () => { setView('notifications'); setMenuOpen(false); };
@@ -526,7 +532,7 @@ function WorkspaceInner({ user }) {
         ) : view === 'notifications' ? (
           <NotificationsPage api={notif} user={user} onOpen={openNote} />
         ) : view === 'calendar' ? (
-          <Calendar lists={openLists} byList={allTasks} user={user} onOpen={pick} />
+          <Calendar lists={calLists} byList={allTasks} user={user} onOpen={pick} />
         ) : view === 'music' ? (
           <Music user={user} music={music} nowPlaying={nowPlaying || ''} />
         ) : view === 'letters' ? (
@@ -534,7 +540,8 @@ function WorkspaceInner({ user }) {
             onNew={() => setCreating('letter')} />
         ) : view === 'board' ? (
           <Board lists={arranged} tasksByList={allTasks} favorites={favorites} actions={actions} onOpen={pick} onNew={() => setCreating('list')}
-            onReorder={onReorder} />
+            onReorder={onReorder}
+            top={<Unplaced list={unplaced} tasks={unplaced && allTasks[unplaced.id]} lists={openLists} user={user} />} />
         ) : active?.kind === 'letter' ? (
           <LetterView key={active.id} list={active} role={active.role} user={user} contacts={contacts} back={back}
             focusComments={focusComments?.id === active.id ? focusComments.at : null}

@@ -4,13 +4,13 @@
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react';
 import { CheckIcon, ChevronDownIcon } from '@heroicons/react/20/solid';
 
-export default function Select({ value, onChange, options, label, id, className = '', prefix, placement = 'bottom start', disabled }) {
+export default function Select({ value, onChange, options, label, id, className = '', prefix, placement = 'bottom start', disabled, placeholder = 'Choose…' }) {
   const current = options.find((o) => o.value === value);
   return (
     <Listbox value={value} onChange={onChange} disabled={disabled}>
       <ListboxButton id={id} className={`sel ${className}`} aria-label={label}>
         {prefix && <span className="sel-prefix">{prefix}</span>}
-        <span className="sel-value">{current?.label ?? 'Choose…'}</span>
+        <span className="sel-value">{current?.label ?? placeholder}</span>
         <ChevronDownIcon className="sel-chev" aria-hidden="true" />
       </ListboxButton>
       <ListboxOptions anchor={{ to: placement, gap: 6, padding: 8 }} transition className="sel-opts" modal={false}>

@@ -80,8 +80,19 @@ export const DEFAULT_MINS = 60;
 export const TIMES = Array.from({ length: 96 }, (_, i) => fromMin(i * 15)); // 00:00 … 23:45
 export const DURATIONS = [15, 30, 45, 60, 90, 120, 180, 240, 480];
 export const durLabel = (m) => (m < 60 ? `${m} min` : `${m / 60} h`);
-// '10:00–11:30'
+// Times are shown the same way everywhere: 12-hour with AM / PM ('9:30 AM'). Minutes past midnight → label;
+// 1440 (the end of the day) is '12:00 AM' too.
+export const minLabel = (n) => {
+  const m = ((n % 1440) + 1440) % 1440;
+  const h = Math.floor(m / 60);
+  return `${h % 12 || 12}:${pad(m % 60)} ${h < 12 ? 'AM' : 'PM'}`;
+};
+// 'HH:MM' → '9:30 AM'
+export const time12 = (hhmm) => (hhmm ? minLabel(toMin(hhmm)) : '');
+// '9:00 AM – 10:30 AM'
 export const timeRange = (start, mins = DEFAULT_MINS) =>
-  start ? `${start}–${fromMin(Math.min(toMin(start) + mins, 1440))}` : '';
+  start ? `${time12(start)} – ${minLabel(Math.min(toMin(start) + mins, 1440))}` : '';
+// '9 AM' (the week view's hour lines)
+export const hourLabel = (h) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
 
 export const longDay = (key) => fromKey(key).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });

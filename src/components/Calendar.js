@@ -1,14 +1,15 @@
 'use client';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { addTask, addTaskLink, createList, deleteTask, removeTaskLink, updateTask, watchTasks } from '@/lib/data';
+import { addTask, addTaskLink, createList, deleteTask, isUnplaced, removeTaskLink, updateTask, watchTasks } from '@/lib/data';
 import {
-  DEFAULT_MINS, addDays, dueLabel, fromKey, fromMin, isOverdue, longDay, monthDays,
-  monthTitle, snap, timeRange, toKey, toMin, todayKey, weekday,
+  DEFAULT_MINS, addDays, dueLabel, fromKey, fromMin, hourLabel, isOverdue, longDay, monthDays,
+  monthTitle, snap, time12, timeRange, toKey, toMin, todayKey, weekday,
 } from '@/lib/dates';
 import { friendlyError } from '@/lib/firebase';
 import { useHolidayCountries, useHolidayCountry, useHolidays } from '@/lib/holidays';
 import { canWrite } from '@/lib/permissions';
 import { colorFor, initials, toDate } from '@/lib/people';
+import DaySheet from './DaySheet';
 import DuePicker from './DuePicker';
 import Loading, { Spinner } from './Loading';
 import Select, { inDropdown } from './Select';
@@ -91,7 +92,8 @@ export default function Calendar({ lists, byList, user, onOpen }) {
   const [panel, setPanel] = useState(null); // { listId, taskId } — the task panel
   const [tray, setTray] = useState(false); // the "No date" tray
   const [quick, setQuick] = useState(null); // { day, start, mins, rect } — the quick-create popover
-  const [creating, setCreating] = useState(null); // initial values for the full "Add to calendar" dialog
+  const [creating, setCreating] = useState(null); // initial values for the "Add to calendar" dialog (scheduling a task you have)
+  const [sheet, setSheet] = useState(null); // { day, init? }: the day sheet (what's on that day, and adding to it)
   const [preview, setPreviewState] = useState(null); // while dragging: { kind, entry?, day, start, mins, x, y }
   const previewRef = useRef(null);
   const setPreview = (p) => { previewRef.current = p; setPreviewState(p); };
@@ -114,7 +116,13 @@ export default function Calendar({ lists, byList, user, onOpen }) {
   for (const e of entries) if (e.t.due) byDay.set(e.t.due, [...(byDay.get(e.t.due) || []), e]);
   for (const items of byDay.values()) items.sort(inDay);
   const undated = entries.filter((e) => !e.t.due && !e.t.done).sort(sorter);
-  const canAdd = !!user; // a new task can always go into a new list of your own
+  const canAdd = !!user; // a new task can always go into a new list of your own (or stay unplaced)
+  const writable = lists.filter((l) => canWrite(l.role));
+  const placeable = writable.filter((l) => !isUnplaced(l)); // the Unplaced list isn't offered as a list to pick
+  const openDay = (day, init = null) => {
+    setPop(null); setQuick(null); setPanel(null); setTray(false);
+    setCursor(day); setYm(monthOf(day)); setSheet({ day, init });
+  };
   const loading = visibleLists.some((l) => !(l.id in byList));
 
   // ---- changes
@@ -296,19 +304,19 @@ export default function Calendar({ lists, byList, user, onOpen }) {
       moveCursor(addDays(cursor, delta));
     } else if (e.key === 'Enter' && e.target.dataset.day) {
       e.preventDefault();
-      setPop({ day: cursor, rect: e.target.getBoundingClientRect() });
+      openDay(cursor);
     }
   }
 
   // Shortcuts, like Google Calendar: C create · M month · W week · Y year · T today · / search · J / K next / previous
   const keys = useRef(null);
-  keys.current = { shift, goToday, cursor, canAdd, busy: !!(creating || quick || panel || pop || tray) };
+  keys.current = { shift, goToday, cursor, canAdd, busy: !!(creating || quick || panel || pop || tray || sheet), openDay };
   useEffect(() => {
     const onKey = (e) => {
       const k = keys.current;
       if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || k.busy) return;
       const key = e.key.toLowerCase();
-      if (key === 'c' && k.canAdd) setCreating({ due: k.cursor });
+      if (key === 'c' && k.canAdd) k.openDay(k.cursor, { due: k.cursor });
       else if (key === 'm') setView('month');
       else if (key === 'w') setView('week');
       else if (key === 'y') setView('year');
@@ -323,13 +331,10 @@ export default function Calendar({ lists, byList, user, onOpen }) {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  // Clicking a day (anywhere but on a task): the quick-create popover for that day
+  // Clicking a day (anywhere but on a task): that day's sheet, with everything on it (or the form, if nothing is)
   const dayClick = (key) => (e) => {
     if (e.target.closest('button, input, select, form')) return;
-    setCursor(key);
-    if (!canAdd) return;
-    setPanel(null);
-    setQuick({ day: key, start: null, mins: DEFAULT_MINS, rect: e.currentTarget.getBoundingClientRect() });
+    openDay(key);
   };
 
   // ---- the days on screen
@@ -413,7 +418,7 @@ export default function Calendar({ lists, byList, user, onOpen }) {
           No date<span className="cal-count">{undated.length}</span>
         </button>
         {canAdd && (
-          <button className="btn primary cal-new" type="button" onClick={() => setCreating({ due: cursor })}
+          <button className="btn primary cal-new" type="button" onClick={() => openDay(cursor, { due: cursor })}
             title="New task (C)">+ New task</button>
         )}
       </div>
@@ -493,7 +498,7 @@ export default function Calendar({ lists, byList, user, onOpen }) {
         <section className="cal-agenda" aria-label={longDay(cursor)}>
           <div className="cal-agenda-h">
             <h3>{cursor === today ? `Today · ${longDay(cursor)}` : longDay(cursor)}</h3>
-            {canAdd && <button type="button" className="link" onClick={() => setCreating({ due: cursor })}>+ Add</button>}
+            {canAdd && <button type="button" className="link" onClick={() => openDay(cursor, { due: cursor })}>+ Add</button>}
           </div>
           {holidays.byDay.has(cursor) && <p className="cal-hol-line">🎉 Public holiday: {holidays.byDay.get(cursor).name}</p>}
           {(byDay.get(cursor) || []).length ? (
@@ -510,13 +515,13 @@ export default function Calendar({ lists, byList, user, onOpen }) {
       </div>
 
       {quick && (
-        <QuickCreate key={`${quick.day}-${quick.start}`} quick={quick} lists={lists.filter((l) => canWrite(l.role))} user={user}
+        <QuickCreate key={`${quick.day}-${quick.start}`} quick={quick} lists={placeable} user={user}
           onClose={() => setQuick(null)}
-          onMore={(init) => { setQuick(null); setCreating(init); }} />
+          onMore={(init) => { setQuick(null); if (init.tab === 'existing') setCreating(init); else openDay(init.due, init); }} />
       )}
       {pop && (
         <DayPopover day={pop.day} rect={pop.rect} items={byDay.get(pop.day) || []} actions={actions}
-          onAdd={canAdd ? () => { setPop(null); setCreating({ due: pop.day }); } : null}
+          onAdd={canAdd ? () => openDay(pop.day, { due: pop.day }) : null}
           onClose={() => setPop(null)} />
       )}
       {panelEntry && <TaskPanel entry={panelEntry} actions={actions} onClose={() => setPanel(null)} />}
@@ -524,8 +529,15 @@ export default function Calendar({ lists, byList, user, onOpen }) {
         <NoDateTray lists={visibleLists} items={undated} actions={actions} dragProps={dragProps} onClose={() => setTray(false)} />
       )}
       {creating && (
-        <AddTaskDialog lists={lists.filter((l) => canWrite(l.role))} byList={byList} init={creating} user={user}
+        <AddTaskDialog lists={placeable} byList={byList} init={creating} user={user}
           onClose={() => setCreating(null)} />
+      )}
+      {sheet && (
+        <DaySheet key={sheet.day} day={sheet.day} items={byDay.get(sheet.day) || []} holiday={holidays.byDay.get(sheet.day)}
+          lists={writable} user={user} actions={actions} init={sheet.init} panelOpen={!!panelEntry}
+          onDay={(d) => { setCursor(d); setYm(monthOf(d)); setSheet({ day: d, init: null }); }}
+          onExisting={(due) => { setSheet(null); setCreating({ due, tab: 'existing' }); }}
+          onClose={() => setSheet(null)} />
       )}
       {preview?.kind === 'move' && preview.start == null && (
         <div className="cal-ghost" style={{ left: preview.x + 10, top: preview.y + 10 }} aria-hidden="true">
@@ -560,7 +572,7 @@ function Chip({ entry, today, ...props }) {
       ) : (
         <i className="chip-bar" style={{ background: colorFor(l.id) }} aria-hidden="true" />
       )}
-      {t.start && <span className="chip-time">{t.start}</span>}
+      {t.start && <span className="chip-time">{time12(t.start)}</span>}
       <span className="chip-t">{t.text}</span>
       <span className="chip-av" style={{ background: colorFor(by) }} title={`Added by ${by}`}>{initials(by)}</span>
     </button>
@@ -647,7 +659,7 @@ function WeekView({ days, today, byDay, holidays, preview, dropDay, quick, grid,
       </div>
       <div className="wk-body" style={cols} ref={body}>
         <div className="wk-gutter" aria-hidden="true">
-          {hours.map((h) => <span key={h} style={{ height: HOUR_PX }}>{h ? `${String(h).padStart(2, '0')}:00` : ''}</span>)}
+          {hours.map((h) => <span key={h} style={{ height: HOUR_PX }}>{h ? hourLabel(h) : ''}</span>)}
         </div>
         {days.map((k) => {
           const timed = (byDay.get(k) || []).filter((e) => e.t.start);
@@ -1020,7 +1032,8 @@ function TaskPanel({ entry, actions, onClose }) {
   return (
     <aside className="cal-panel" ref={box} role="dialog" aria-label={t.text}>
       <TaskDetails task={t} list={l} write={canWrite(l.role)} on={on} onClose={onClose}
-        footer={<button type="button" className="btn block" onClick={() => actions.openList(l)}>Open “{l.title}”</button>} />
+        footer={isUnplaced(l) ? <p className="cal-hint">Not in a list yet. Put it in one from Unplaced on My List.</p>
+          : <button type="button" className="btn block" onClick={() => actions.openList(l)}>Open “{l.title}”</button>} />
     </aside>
   );
 }
@@ -1168,7 +1181,7 @@ function AddTaskDialog({ lists, byList, init, user, onClose }) {
                             <span className="cal-pick-t">{c.t.text}</span>
                             <span className="cal-r-m">
                               <i style={{ background: colorFor(c.l.id) }} />{c.l.title}
-                              {' · '}{c.t.due ? <em className={isOverdue(c.t) ? 'late-txt' : ''}>{dueLabel(c.t.due)}{c.t.start ? ` ${c.t.start}` : ''}</em> : 'No date'}
+                              {' · '}{c.t.due ? <em className={isOverdue(c.t) ? 'late-txt' : ''}>{dueLabel(c.t.due)}{c.t.start ? ` ${time12(c.t.start)}` : ''}</em> : 'No date'}
                             </span>
                           </span>
                         </label>
