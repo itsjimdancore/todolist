@@ -5,7 +5,7 @@ import {
 } from '@/lib/data';
 import { friendlyError } from '@/lib/firebase';
 import { EMAIL_RE } from '@/lib/permissions';
-import { displayName, toDate } from '@/lib/people';
+import { Avatar, displayName, toDate } from '@/lib/people';
 import BackLink from './BackLink';
 import Loading, { Spinner } from './Loading';
 import PeopleStack from './PeopleStack';
@@ -62,11 +62,90 @@ function Linked({ text }) {
   return out;
 }
 
-// The Chat page: start the private chat, or the conversation
+// The Chat page: start the private chat, or the chat list and the conversation (side by side on computers;
+// on phones the list first, tap the chat to open it, ‹ goes back to the list)
 export default function Chat({ api, user, contacts, back }) {
+  // opened from a chat message's notification: straight into the conversation
+  const [inConv, setInConv] = useState(() => new URLSearchParams(window.location.search).get('chat') === '1');
+  const [person, setPerson] = useState(null);
+  const { other } = api;
+  useEffect(() => (other ? watchPerson(other, setPerson) : undefined), [other]);
+  // computers show the list and the conversation side by side; phones one at a time
+  const [wide, setWide] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 861px)');
+    const on = () => setWide(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, []);
   if (api.chat === undefined) return <div className="chat-page"><Loading variant="page" hint="Opening your chat" /></div>;
   if (!api.chat) return <StartChat user={user} contacts={contacts} back={back} />;
-  return <Conversation api={api} user={user} back={back} />;
+  return (
+    <div className={inConv ? 'chat-page chat-split conv-open' : 'chat-page chat-split'}>
+      <ChatList api={api} user={user} person={person} back={back} active={inConv || wide} onOpen={() => setInConv(true)} />
+      {/* only on screen counts as read, so on phones it's mounted while open */}
+      {(wide || inConv) && <Conversation api={api} user={user} person={person} back={{ label: 'Chats', onClick: () => setInConv(false) }} />}
+    </div>
+  );
+}
+
+// WhatsApp's list time: 9:41 PM today, Yesterday, the weekday this week, else 30/10/2026
+function listTime(ts) {
+  if (!ts) return '';
+  const d = toDate(ts);
+  const day = dayLabel(d);
+  if (day === 'Today') return clock(d);
+  if (day === 'Yesterday' || !/\d/.test(day)) return day;
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+// The list of chats: [avatar] [name / latest message with ticks] [time / unread count]
+function ChatList({ api, user, person, back, active, onOpen }) {
+  const { chat, other, me, unread } = api;
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
+  const name = chat.names?.[other] || person?.displayName || (other || '').split('@')[0];
+  const last = chat.last;
+  const mine = last?.from === me;
+  const typing = ms(chat.typing?.[other]) > Date.now() - TYPING_MS;
+  const theirRead = ms(chat.readAt?.[other]);
+  const state = mine ? tickState({ createdAt: last.at }, Math.max(theirRead, ms(chat.deliveredAt?.[other])), theirRead) : null;
+  return (
+    <aside className="chat-list" aria-label="Chats">
+      <header className="chat-list-h">
+        <BackLink back={back} />
+        <h1>Chats</h1>
+      </header>
+      <ul className="chat-rows">
+        <li>
+          <button type="button" className={active ? 'chat-item on' : 'chat-item'} onClick={onOpen}
+            aria-label={`Chat with ${name}${unread ? `, ${unread} unread` : ''}`}>
+            <Avatar person={{ email: other, displayName: name, photoURL: person?.photoURL || '' }} size={48} title={false} />
+            <span className="chat-item-b">
+              <span className="chat-item-name">{name}</span>
+              <span className={typing ? 'chat-item-last typing' : 'chat-item-last'}>
+                {typing ? 'typing…' : last ? (
+                  <>
+                    {mine && <Ticks state={state} />}
+                    <span className="chat-item-txt">{last.text || '🚫 This message was deleted'}</span>
+                  </>
+                ) : <span className="chat-item-txt">Say hi 👋</span>}
+              </span>
+            </span>
+            <span className="chat-item-side">
+              <span className={unread ? 'chat-item-time unread' : 'chat-item-time'}>{listTime(last?.at || chat.createdAt)}</span>
+              {unread > 0 ? <span className="chat-item-count">{unread > 99 ? '99+' : unread}</span> : <span className="chat-item-count none" aria-hidden="true" />}
+            </span>
+          </button>
+        </li>
+      </ul>
+      <p className="chat-list-note">🔒 Your private chat. Only the two of you can read it.</p>
+    </aside>
+  );
 }
 
 function StartChat({ user, contacts, back }) {
@@ -109,11 +188,9 @@ function StartChat({ user, contacts, back }) {
   );
 }
 
-function Conversation({ api, user, back }) {
+function Conversation({ api, user, person, back }) {
   const toast = useToast();
   const { chat, chatId, other, me, messages, hasMore, loadMore } = api;
-  const [person, setPerson] = useState(null);
-  useEffect(() => (other ? watchPerson(other, setPerson) : undefined), [other]);
   const name = chat.names?.[other] || person?.displayName || (other || '').split('@')[0];
   const [, tick] = useState(0);
   useEffect(() => {
@@ -265,9 +342,9 @@ function Conversation({ api, user, back }) {
   const menuMsg = menu && (messages || []).find((x) => x.id === menu.id);
 
   return (
-    <div className="chat-page chat-conv">
+    <div className="chat-conv">
       <header className="chat-h">
-        <BackLink back={back} />
+        <span className="chat-back-m"><BackLink back={back} /></span>
         <PeopleStack people={[{ email: other, displayName: name }]} me={user} />
         <div className="chat-h-b">
           <b>{name}</b>
