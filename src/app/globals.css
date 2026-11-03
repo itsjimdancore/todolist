@@ -2545,3 +2545,10 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 }
 
 .chat-shell > .chat-info { flex: 1; }
+
+/* the chat fills the whole page (no back link, no outer margins or frame) */
+.main > .chat-shell { margin: -24px 0 0; }
+.chat-shell.wide { border: none; border-radius: 0; }
+.chat-shell .chat-list { max-width: none; border: none; border-radius: 0; }
+.chat-shell .chat-list-h { padding-top: 14px; }
+@media (max-width: 860px) { .main > .chat-shell { margin: -16px 0 0; } }

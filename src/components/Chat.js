@@ -189,7 +189,7 @@ export default function Chat({ api, user, contacts, back, lists = [], onOpenList
   const name = api.chat.names?.[other] || person?.displayName || (other || '').split('@')[0];
   const markRead = () => (api.unread ? markChatRead(api.chatId, user).then(() => toast('Marked as read')).catch(() => {}) : toast('No unread messages', 'info'));
   const listEl = (
-    <ChatList api={api} user={user} person={person} name={name} back={back} active={wide && selected}
+    <ChatList api={api} user={user} person={person} name={name} active={wide && selected}
       onOpen={open} onMarkRead={markRead} onInfo={() => { open(); setInfo(true); }}
       onNewChat={() => toast(`This is your private chat with ${name}. Only two people can chat here.`, 'info')} />
   );
@@ -232,7 +232,7 @@ function ChatWelcome({ name }) {
 }
 
 // The Chats list: header, search, All / Unread, the chat, and messages matching the search
-function ChatList({ api, user, person, name, back, active, onOpen, onMarkRead, onInfo, onNewChat }) {
+function ChatList({ api, user, person, name, active, onOpen, onMarkRead, onInfo, onNewChat }) {
   const { chat, other, me, unread, messages, hasMore, loadMore } = api;
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
@@ -253,7 +253,6 @@ function ChatList({ api, user, person, name, back, active, onOpen, onMarkRead, o
 
   return (
     <aside className="chat-list" aria-label="Chats">
-      <div className="chat-list-top"><BackLink back={back} /></div>
       <header className="chat-list-h">
         <h1>Chats</h1>
         <span className="wa-icons">
