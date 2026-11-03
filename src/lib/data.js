@@ -41,13 +41,14 @@ export async function saveProfile(user) {
 
 // ---------- people/{email}: my name, photo and when I was last here, for the people I share lists with ----------
 // (users/{uid} stays private; this small card is all anyone else can see, and only if they know my email)
-export function savePresence(user) {
+export function savePresence(user, online = true) {
   const email = emailOf(user);
   if (!email) return Promise.resolve();
   return setDoc(doc(db(), 'people', email), {
     email,
     displayName: nameOf(user).slice(0, 120),
     photoURL: (user.photoURL || '').slice(0, 1000),
+    online: !!online, // false once I leave the app or sign out
     lastSeen: serverTimestamp(),
   });
 }

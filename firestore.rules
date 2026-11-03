@@ -183,10 +183,11 @@ service cloud.firestore {
       allow get: if signedIn();
       allow list: if false;
       allow create, update: if hasEmail() && email == myEmail()
-        && request.resource.data.keys().hasOnly(['email', 'displayName', 'photoURL', 'lastSeen'])
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'photoURL', 'online', 'lastSeen'])
         && request.resource.data.email == myEmail()
         && request.resource.data.displayName is string && request.resource.data.displayName.size() <= 120
         && request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 1000
+        && request.resource.data.get('online', false) is bool
         && request.resource.data.lastSeen == request.time;
       allow delete: if hasEmail() && email == myEmail();
     }

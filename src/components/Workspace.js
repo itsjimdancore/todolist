@@ -110,19 +110,30 @@ function WorkspaceInner({ user }) {
     saveProfile(user).catch(() => {});
   }, [user]);
 
-  // ---- "last active" for the people I share with: on opening the app, on coming back to it, and every
-  //      5 minutes while it's on screen (never more often, so switching tabs doesn't write each time)
+  // ---- "last active" for the people I share with: on opening the app, on coming back to it, every 5 minutes
+  //      while it's on screen, and once more when I leave it (switch tab, close it, lock the phone), so the time
+  //      people see is when I actually stopped. Signing out saves it too (onSignOut).
   useEffect(() => {
     let last = 0;
-    const ping = () => {
-      if (document.visibilityState !== 'visible' || Date.now() - last < 5 * 60 * 1000 - 1000) return;
+    let wasOnline = null;
+    const save = (online) => {
+      // going online or offline always saves; staying online saves at most every 5 minutes
+      if (online === wasOnline && Date.now() - last < 5 * 60 * 1000 - 1000) return;
       last = Date.now();
-      savePresence(user).catch(() => {});
+      wasOnline = online;
+      savePresence(user, online).catch(() => {});
     };
-    ping();
-    const every = setInterval(ping, 5 * 60 * 1000);
-    document.addEventListener('visibilitychange', ping);
-    return () => { clearInterval(every); document.removeEventListener('visibilitychange', ping); };
+    const onVis = () => save(document.visibilityState === 'visible');
+    const onLeave = () => save(false);
+    onVis();
+    const every = setInterval(() => document.visibilityState === 'visible' && save(true), 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pagehide', onLeave);
+    return () => {
+      clearInterval(every);
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pagehide', onLeave);
+    };
   }, [user]);
 
   // ---- device notifications: if they're on for this device, keep its token current
@@ -299,6 +310,8 @@ function WorkspaceInner({ user }) {
   async function onSignOut() {
     window.history.replaceState(null, '', window.location.pathname);
     await pausePush().catch(() => {});
+    // the moment I signed out is my "last active" (must be saved while still signed in)
+    await savePresence(user, false).catch(() => {});
     signOut(fb().auth);
   }
 

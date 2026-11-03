@@ -50,7 +50,8 @@ export default function PeopleStack({ people, me, max = 6 }) {
   const full = useMemo(() => people.map((p) => {
     if (p.email === myEmail) return { ...p, displayName: nameOf(me), photoURL: me.photoURL || '', isMe: true };
     const c = cards[p.email];
-    return { ...p, displayName: c?.displayName || p.displayName, photoURL: c?.photoURL || '', lastSeen: c?.lastSeen, known: p.email in cards };
+    return { ...p, displayName: c?.displayName || p.displayName, photoURL: c?.photoURL || '', lastSeen: c?.lastSeen,
+      online: c?.online !== false, known: p.email in cards }; // cards saved before "online" existed count as online
   }), [people, cards, me, myEmail]);
 
   const visible = open ? full : full.slice(0, max);
@@ -101,7 +102,7 @@ export default function PeopleStack({ people, me, max = 6 }) {
 
 function Seen({ p }) {
   if (!p.isMe && !p.known) return <span className="ppl-seen">…</span>;
-  const label = p.isMe ? 'Active now' : lastSeenLabel(p.lastSeen);
+  const label = p.isMe ? 'Active now' : lastSeenLabel(p.lastSeen, p.online);
   const on = label === 'Active now';
   return (
     <span className="ppl-seen" title={p.lastSeen ? toDate(p.lastSeen).toLocaleString() : undefined}>

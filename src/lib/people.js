@@ -45,12 +45,15 @@ export function Avatar({ person, size = 28, title = true }) {
   );
 }
 
-// "Active now", "Active 12 min ago", "Active 3 h ago", "Last active yesterday at 14:20", "Last active 28 Oct at 09:05"
-export function lastSeenLabel(ts) {
+// "Active now" (app open), then once they've left: "Active just now", "Active 12 min ago", "Active 3 h ago",
+// "Last active today at 14:20", "Last active yesterday at 14:20", and from two days back "Last active 2026/November/01 at 14:20"
+export function lastSeenLabel(ts, online = false) {
   if (!ts) return 'Not active here yet';
   const d = toDate(ts);
   const s = (Date.now() - d.getTime()) / 1000;
-  if (s < 6 * 60) return 'Active now'; // the app checks in every 5 minutes while it's open
+  // the app checks in every 5 minutes while it's open, so an "online" older than that means it was closed without saying so
+  if (online && s < 6 * 60) return 'Active now';
+  if (s < 60) return 'Active just now';
   if (s < 3600) return `Active ${Math.floor(s / 60)} min ago`;
   if (s < 6 * 3600) return `Active ${Math.floor(s / 3600)} h ago`;
   const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -59,8 +62,8 @@ export function lastSeenLabel(ts) {
   const days = Math.round((today - day) / 86400000);
   if (days === 0) return `Last active today at ${time}`;
   if (days === 1) return `Last active yesterday at ${time}`;
-  const date = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(d.getFullYear() !== today.getFullYear() && { year: 'numeric' }) });
-  return `Last active ${date} at ${time}`;
+  const month = d.toLocaleDateString(undefined, { month: 'long' });
+  return `Last active ${d.getFullYear()}/${month}/${String(d.getDate()).padStart(2, '0')} at ${time}`;
 }
 
 // Accepts a Firestore Timestamp, a Date, or nothing (a write that hasn't synced yet)
