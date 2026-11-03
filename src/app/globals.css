@@ -1013,17 +1013,41 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
   .wave > span { animation: none; }
 }
 
-/* Tablets and phones: just the form, logo above it */
+/* Tablets and phones: just the form, logo above it, the whole thing centred on the screen.
+   The auto margins centre it top-to-bottom, and shrink to nothing when it's taller than the screen
+   (small phones, keyboard open), so the top never gets cut off. Headings and icons are centred too;
+   labels, boxes and messages stay left-aligned so they're easy to read. */
 @media (max-width: 900px) {
   .auth-split { grid-template-columns: minmax(0, 1fr); }
   .auth-brand { display: none; }
-  .auth-mobile-brand { display: flex; }
-  .auth-main { justify-content: flex-start; padding-top: max(40px, env(safe-area-inset-top)); }
+  .auth-main { justify-content: flex-start; gap: 22px;
+    padding: max(28px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+    background: radial-gradient(520px 340px at 50% -8%, rgb(79 194 176 / .14), transparent 70%), var(--bg); }
+  .auth-mobile-brand { display: flex; justify-content: center; margin-top: auto; }
+  .auth-card { margin-bottom: auto; width: min(440px, 100%); padding: 30px 28px; border: 1px solid var(--line); border-radius: 18px;
+    background: var(--surface); box-shadow: 0 24px 60px rgb(0 0 0 / .35); }
+  .auth-card input:not([type=checkbox]), .auth-card .google { background: var(--bg); }
+  .auth-title { text-align: center; }
+  .auth-title p { max-width: 34ch; margin-left: auto; margin-right: auto; }
+  .auth-badge { align-self: center; }
+  .auth-view > .btn, .auth-view > .auth-alt { align-self: stretch; }
+  .auth-checking { min-height: 160px; }
 }
+/* Phones: no card frame (it would only eat width), a bit tighter */
 @media (max-width: 480px) {
-  .auth-main { padding-left: max(18px, env(safe-area-inset-left)); padding-right: max(18px, env(safe-area-inset-right)); }
+  .auth-main { gap: 26px; padding-left: max(18px, env(safe-area-inset-left)); padding-right: max(18px, env(safe-area-inset-right)); }
+  .auth-card { padding: 0; border: none; border-radius: 0; background: none; box-shadow: none; }
+  .auth-card input:not([type=checkbox]), .auth-card .google { background: var(--surface); }
+  .auth-view { gap: 16px; }
   .auth-title h1 { font-size: 25px; }
+  .auth-title p { font-size: 14.5px; }
+  .auth-mobile-brand { font-size: 17px; }
   .auth-card input:not([type=checkbox]) { font-size: 16px; } /* stops iPhones zooming in on focus */
+  .auth-card .btn { height: 48px; } /* easier to tap */
+}
+/* Short screens (landscape phones): start at the top instead of centring */
+@media (max-width: 900px) and (max-height: 520px) {
+  .auth-mobile-brand { margin-top: 0; }
 }
 a.btn { text-decoration: none; color: inherit; }
 a.btn.primary { color: var(--accent-ink); }
