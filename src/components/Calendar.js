@@ -111,9 +111,8 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
   const q = query.trim().toLowerCase();
   const [hiddenOwners, setHiddenOwners] = useState(() => new Set()); // shared calendars switched off
   const [sharing, setSharing] = useState(false); // the Share calendar window
-  const [shareOpen, setShareOpen] = useState(false); // phones: the sharing part is folded away until tapped
-  const shareCount = (shares || []).length + withMe.length;
-  const shareNew = withMe.some((c) => !c.share.seen);
+  const [toolsOpen, setToolsOpen] = useState(false); // phones: Filter, Sort and No date are folded away until tapped
+  const narrowed = hidden.size > 0 || sort !== 'manual'; // a filter or sort is on (shown on the folded button)
   const visibleLists = lists.filter((l) => !hidden.has(l.id) && !(l.calOwnerUid && hiddenOwners.has(l.calOwnerUid)));
   const entries = taskEntries(visibleLists, byList).filter((e) => !q || e.t.text.toLowerCase().includes(q));
   const manual = (a, b) => order.get(a.l.id) - order.get(b.l.id) || toDate(a.t.createdAt) - toDate(b.t.createdAt);
@@ -392,27 +391,17 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
   );
 
   return (
-    <div className={['cal-wrap', preview?.kind && 'dragging', shareOpen && 'sharing-open'].filter(Boolean).join(' ')}>
+    <div className={['cal-wrap', preview?.kind && 'dragging', toolsOpen && 'tools-open'].filter(Boolean).join(' ')}>
       <header className="bar">
         <div className="bar-left">
           <h1>Calendar</h1>
           <div className="meta">Tasks with a due date, from every list you can open{withMe.length ? ' and every calendar shared with you' : ''}</div>
         </div>
         <div className="bar-right">
-          {/* phones: one button that unfolds the sharing part (closed by default) */}
-          <button type="button" className={shareOpen ? 'btn cal-sharing-toggle on' : 'btn cal-sharing-toggle'}
-            onClick={() => setShareOpen((o) => !o)} aria-expanded={shareOpen} aria-controls="cal-sharing">
-            Sharing{shareCount > 0 && <span className="cal-count">{shareCount}</span>}
-            {shareNew && !shareOpen && <i className="cal-sharing-dot" aria-label="New" />}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={shareOpen ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} /></svg>
-          </button>
           <ShareCalendarButton user={user} shares={shares} contacts={contacts} onOpen={() => setSharing(true)} />
         </div>
       </header>
 
-      <div id="cal-sharing" className="cal-sharing-m">
-        <ShareCalendarButton user={user} shares={shares} contacts={contacts} onOpen={() => setSharing(true)} />
-      </div>
       <SharedCalendarsBar user={user} withMe={withMe} hiddenOwners={hiddenOwners} setHiddenOwners={setHiddenOwners} />
       {sharing && <ShareCalendarDialog user={user} shares={shares || []} contacts={contacts} onClose={() => setSharing(false)} />}
 
@@ -436,6 +425,14 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
             <kbd className="cal-search-k" title="Press / to search">/</kbd>
           )}
         </div>
+        {/* phones: Filter, Sort and No date fold away behind this (closed by default) */}
+        <button type="button" className={toolsOpen || narrowed ? 'btn cal-tools-toggle on' : 'btn cal-tools-toggle'}
+          onClick={() => setToolsOpen((o) => !o)} aria-expanded={toolsOpen}
+          aria-label={toolsOpen ? 'Hide filter, sort and no date' : 'Show filter, sort and no date'} title="Filter, sort, no date">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" /></svg>
+          {undated.length > 0 && !toolsOpen && <span className="cal-count">{undated.length}</span>}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={toolsOpen ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} /></svg>
+        </button>
         <FilterMenu lists={lists} hidden={hidden} setHidden={setHidden} />
         <Select className="cal-sort" value={sort} onChange={setSort} label="Sort tasks" prefix="Sort:"
           options={Object.entries(SORTS).map(([k, label]) => ({ value: k, label }))} />

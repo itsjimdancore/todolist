@@ -2568,17 +2568,12 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 .cal-share-pop b { color: var(--fg); overflow-wrap: anywhere; }
 .cal-share-pop .btn { align-self: flex-end; }
 
-/* phones: the sharing part (avatars, Share calendar, ⋮, calendars shared with you) is folded behind "Sharing" */
-.cal-sharing-toggle, .cal-sharing-m { display: none; }
-.cal-sharing-toggle { align-items: center; gap: 6px; position: relative; }
-.cal-sharing-dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+/* phones: Filter, Sort and No date fold away behind one button (closed by default); the rest stays as it is */
+.cal-toolbar .cal-tools-toggle { display: none; }
 @media (max-width: 860px) {
-  .cal-sharing-toggle { display: inline-flex; }
-  .bar-right > .cal-share-btn { display: none; }
-  .cal-wrap:not(.sharing-open) .cal-shared { display: none; }
-  .cal-wrap.sharing-open .cal-sharing-m { display: flex; }
-  .cal-sharing-m .cal-share-btn { flex-wrap: wrap; }
-  .cal-sharing-m .cal-share-pop { left: auto; right: 0; }
+  .cal-toolbar .cal-tools-toggle { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+  .cal-wrap:not(.tools-open) .cal-toolbar :is(.cal-filter, .cal-sort, .cal-nodate) { display: none; }
+  .cal-toolbar .cal-search { flex: 1 1 200px; }
 }
 
 /* phones: the month title and Today side by side on one line ("November 2026 ▾ … Today ‹ ›") */
