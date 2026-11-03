@@ -564,7 +564,7 @@ function WorkspaceInner({ user }) {
           <Calendar lists={calLists} byList={allTasks} user={user} onOpen={pick}
             shares={calShares} withMe={calsWithMe} contacts={contacts} />
         ) : view === 'chat' ? (
-          <Chat api={chatApi} user={user} contacts={contacts} back={back} />
+          <Chat api={chatApi} user={user} contacts={contacts} back={back} lists={lists || []} onOpenList={pick} />
         ) : view === 'music' ? (
           <Music user={user} music={music} nowPlaying={nowPlaying || ''} />
         ) : view === 'letters' ? (
