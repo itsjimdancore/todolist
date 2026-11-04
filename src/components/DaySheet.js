@@ -9,7 +9,7 @@ import { colorFor, initials } from '@/lib/people';
 import DuePicker from './DuePicker';
 import { Spinner } from './Loading';
 import Select, { inDropdown } from './Select';
-import { MAX_LOCATION, PinIcon, TimeFields } from './TaskDetails';
+import { MAX_LOCATION, PinIcon, StepLines, TimeFields } from './TaskDetails';
 import { useToast } from './Toast';
 
 const NONE = '__none'; // no list: the task stays in Unplaced (on My List)
@@ -116,8 +116,7 @@ function Row({ n, entry, actions, confirming, setConfirm }) {
       <span className="ds-n" aria-label={`Number ${n}`}>{n}</span>
       <div className="ds-task">
         <button type="button" className="ds-title" onClick={() => actions.open(entry)}>{t.text}</button>
-        {t.notes && <p className="ds-notes">{t.notes}</p>}
-        {t.location && <span className="ds-loc"><PinIcon /><span>{t.location}</span></span>}
+        <StepLines task={t} />
         <span className="ds-list"><i style={{ background: colorFor(l.id) }} />{listName(l)}</span>
       </div>
       <div className="ds-cell ds-links" data-label="Link">

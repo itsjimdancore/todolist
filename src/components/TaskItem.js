@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { timeAgo } from '@/lib/people';
 import DuePicker from './DuePicker';
 import { AddLink, LinkChips } from './TaskLinks';
+import { StepLines } from './TaskDetails';
 
 export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, onDue, onArchive, onDelete, onAddLink, onRemoveLink }) {
   const [editing, setEditing] = useState(false);
@@ -47,8 +48,7 @@ export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, on
             <LinkChips links={task.links} canEdit={write && !task.archived} onRemove={onRemoveLink} />
           </span>
         )}
-        {task.notes && !editing && <p className="task-notes">{task.notes}</p>}
-        {task.location && !editing && <p className="task-loc">📍 {task.location}</p>}
+        {!editing && <StepLines task={task} />}
         {!editing && linking && write && !task.archived && (
           <div className="task-links"><AddLink links={task.links} onAdd={onAddLink} setAdding={setLinking} /></div>
         )}

@@ -99,6 +99,22 @@ export function PinIcon() {
   );
 }
 
+// The steps in a task row: one line each, what's going to be done then its location beside it
+export function StepLines({ task }) {
+  const steps = stepsOf(task).filter((s) => s.text || s.location);
+  if (!steps.length) return null;
+  return (
+    <ul className="step-lines">
+      {steps.map((s, i) => (
+        <li key={i}>
+          {s.text && <span className="sl-t">{s.text}</span>}
+          {s.location && <span className="sl-loc"><PinIcon /><span>{s.location}</span></span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 const MapsLink = ({ place }) => (place
   ? <a className="td-maps" href={mapsUrl(place)} target="_blank" rel="noopener noreferrer">Open in Maps ↗</a>
   : null);

@@ -1585,6 +1585,12 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .cal-notes-read { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--sunk); font-size: 14px; white-space: pre-wrap; }
 .task-notes { margin: 2px 0 0; font-size: 13px; color: var(--muted); white-space: pre-wrap; text-decoration: none; }
 .task-loc { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+/* a task's steps in its row: one line each, what then the pin and where beside it (wrapping under it if there's no room) */
+.step-lines { list-style: none; display: flex; flex-direction: column; gap: 2px; margin: 3px 0 0; padding: 0; font-size: 13px; color: var(--muted); }
+.step-lines li { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; min-width: 0; }
+.sl-t { overflow-wrap: anywhere; }
+.sl-loc { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; overflow-wrap: anywhere; }
+.sl-loc svg { flex: none; width: 13px; height: 13px; color: var(--accent); }
 /* the ⋯ on each task, opening the same menu as a list's ⋮ */
 .task-more { display: grid; place-items: center; width: 34px; height: 34px; border: none; border-radius: 8px; background: transparent; color: var(--muted); }
 .task-more:hover, .task-more[aria-expanded="true"] { background: var(--sunk); color: var(--fg); }
@@ -1596,7 +1602,11 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .t-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
 /* task details: the popup in a list (and the Calendar's side panel) */
-.modal.task-modal { width: min(480px, 100%); max-height: calc(100dvh - 32px); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+/* many steps: the popup scrolls inside itself (not the page behind), its header with ✕ staying at the top */
+.modal.task-modal { width: min(480px, 100%); max-height: calc(100dvh - 32px); padding: 18px; display: flex; flex-direction: column; gap: 14px;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.task-modal > * { flex-shrink: 0; min-width: 0; } /* scroll, never squash */
+.task-modal > .cal-panel-h { position: sticky; top: -18px; z-index: 3; margin: -18px -18px -6px; padding: 12px 18px 8px; background: var(--surface); }
 .td-title { padding: 2px 4px; margin: -2px -4px; border: none; border-radius: 6px; background: none; color: inherit; font: inherit; text-align: left; overflow-wrap: anywhere; cursor: text; }
 .td-title:hover { background: var(--sunk); }
 /* editing the title: the same title, its text editable where it sits (like editing a comment), no buttons */
@@ -1662,9 +1672,21 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
     padding: 16px 16px max(16px, env(safe-area-inset-bottom)); }
   .task-modal :is(input:not([type=checkbox]), textarea, .btn) { font-size: 16px; } /* no zoom-in on iPhone */
   .task-modal .td-loc-in input, .td-title-in { height: 44px; }
+  .task-modal > .cal-panel-h { top: -16px; margin: -16px -16px -6px; padding: 10px 16px 6px; }
+  .task-modal > .cal-panel-h .ic { min-width: 40px; min-height: 40px; font-size: 16px; }
+  /* bigger things to tap in the steps */
+  .step-x { min-width: 36px; min-height: 36px; }
+  .step-top .td-maps { padding: 6px 0; }
+  .step-link-add { padding: 8px 0; font-size: 13.5px; }
+  .step-add { min-height: 42px; padding: 0 16px; font-size: 14px; }
   .td-acts { grid-template-columns: 1fr; }
   .td-acts .btn { height: 46px; }
   .cal-panel-d { grid-template-columns: 80px minmax(0, 1fr); }
+}
+/* narrow phones: Date / Time / Status labels above their values, so From / To with AM / PM fit without sideways scroll */
+@media (max-width: 420px) {
+  .task-modal .cal-panel-d, .cal-panel .cal-panel-d { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .task-modal .cal-panel-d dd + dt, .cal-panel .cal-panel-d dd + dt { margin-top: 10px; }
 }
 
 /* links on a task: chips that open in a new tab, and the small "add a link" form */
