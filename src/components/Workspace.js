@@ -50,7 +50,7 @@ import Letters from './Letters';
 import LetterView from './LetterView';
 import Loading from './Loading';
 import Music from './Music';
-import Partner from './Partner';
+import Partner, { PartnerPrompt } from './Partner';
 import MusicPlayer from './MusicPlayer';
 import { ToastProvider, useToast } from './Toast';
 import { UpdateProvider } from './UpdateBanner';
@@ -651,6 +651,9 @@ function WorkspaceInner({ user }) {
           </div>
         )}
       </main>
+
+      {/* someone added me as their partner: offer to share mine back in one tap (not on the Partner page itself) */}
+      {lists !== null && view !== 'partner' && <PartnerPrompt user={user} api={partnerApi} />}
 
       {creating && (
         <ListDialog dialog={{ kind: 'create', letter: creating === 'letter' }} contacts={contacts} onCreate={onCreate}

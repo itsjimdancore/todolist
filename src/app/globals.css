@@ -2661,3 +2661,11 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
   .partner-f input { height: 44px; font-size: 16px; }
   .partner-f .btn { height: 44px; }
 }
+/* "X added you as their partner": share mine back in one tap */
+.partner-prompt .m-b { display: flex; flex-direction: column; gap: 10px; }
+.partner-prompt .m-b p { margin: 0; font-size: 14.5px; line-height: 1.5; }
+.pp-who { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .partner-prompt .m-f { flex-direction: column-reverse; }
+  .partner-prompt .m-f .btn { width: 100%; height: 46px; }
+}
