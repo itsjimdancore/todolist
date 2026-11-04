@@ -19,8 +19,9 @@ export const PERMISSIONS = {
   },
 };
 
-export const canWrite = (role) => role === 'owner' || role === 'write' || role === 'readwrite';
-export const canComment = (role) => role === 'owner' || role === 'comment' || role === 'readwrite';
-export const roleLabel = (role) => (role === 'owner' ? 'Owner' : PERMISSIONS[role]?.label ?? 'No access');
+export const canWrite = (role) => role === 'owner' || role === 'write' || role === 'readwrite' || role === 'partner';
+export const canComment = (role) => role === 'owner' || role === 'comment' || role === 'readwrite' || role === 'partner';
+// 'partner': my partner's lists and letters (see lib/partner.js): edit and comment, but not delete, rename or share
+export const roleLabel = (role) => (role === 'owner' ? 'Owner' : role === 'partner' ? 'Partner' : PERMISSIONS[role]?.label ?? 'No access');
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;

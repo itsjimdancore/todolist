@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 
-// The ⋮ menu on a list. Only the owner can rename, archive or delete; members can leave.
+// The ⋮ menu on a list. Only the owner can rename, archive or delete; members can leave (a partner has nothing to leave).
 export default function ListMenu({ list, favorite, actions }) {
   const [open, setOpen] = useState(false);
   const box = useRef(null);
@@ -40,7 +40,8 @@ export default function ListMenu({ list, favorite, actions }) {
           {isOwner && item(list.archived ? '↩ Unarchive' : '🗄 Archive', actions.archive)}
           {isOwner
             ? item('🗑 Delete', actions.remove, 'danger')
-            : item(list.kind === 'letter' ? '⎋ Leave letter' : '⎋ Leave list', actions.leave, 'danger')}
+            // my partner's: nothing to leave (it's theirs, shared with me because we're partners)
+            : list.role !== 'partner' && item(list.kind === 'letter' ? '⎋ Leave letter' : '⎋ Leave list', actions.leave, 'danger')}
         </div>
       )}
     </div>

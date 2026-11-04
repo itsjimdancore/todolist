@@ -31,7 +31,8 @@ const PlayIcon = () => (
 
 // The Music page: find songs by name, keep them here, and play them in the sidebar player.
 // music: my saved songs, newest first. nowPlaying: the link in the sidebar player ('' = none).
-export default function Music({ user, music, nowPlaying }) {
+// partner: { name, music } while linked (lib/partner.js): their songs, to play here or add to mine
+export default function Music({ user, music, nowPlaying, partner = null }) {
   const toast = useToast();
   const [q, setQ] = useState('');
   const [results, setResults] = useState(null); // null = no search yet
@@ -305,6 +306,53 @@ export default function Music({ user, music, nowPlaying }) {
           </>
         )}
       </section>
+
+      {partner && (
+        <section className="music-sec" aria-labelledby="music-partner">
+          <div className="music-head">
+            <h2 id="music-partner" className="music-h2">{partner.name}&apos;s music <span className="count">{partner.music.length}</span></h2>
+          </div>
+          {partner.music.length === 0 ? (
+            <p className="muted">{partner.name} hasn&apos;t kept any songs yet.</p>
+          ) : (
+            <ul className="music-list">
+              {partner.music.map((m, i) => {
+                const on = !!playing && same(m, playing);
+                const kept = music.some((x) => same(x, m));
+                return (
+                  <li key={`p:${m.type}:${m.id}`} className={on ? 'trk on' : 'trk'} onClick={() => { if (!on) play(m); }}>
+                    <span className="trk-n">
+                      {on
+                        ? <span className="music-eq" aria-hidden="true"><i /><i /><i /></span>
+                        : <><span className="trk-i">{i + 1}</span><span className="trk-pi"><PlayIcon /></span></>}
+                    </span>
+                    <button type="button" className="trk-t" onClick={(e) => { e.stopPropagation(); if (!on) play(m); }}
+                      aria-label={on ? `${m.title}, playing now` : `Play ${m.title}`} aria-current={on || undefined}>
+                      {m.image
+                        ? <img className="music-cover" src={m.image} alt="" width="40" height="40" loading="lazy" />
+                        : <span className="music-cover blank" aria-hidden="true">♪</span>}
+                      <span className="trk-tt">
+                        <b>{m.title}</b>
+                        <span>{m.artist || kindOf(m.type)}</span>
+                      </span>
+                    </button>
+                    <span className="trk-al">{m.album || (m.type === 'track' ? '' : kindOf(m.type))}</span>
+                    <span className="trk-d">{addedAgo(m.addedAt)}</span>
+                    <span className="trk-len">{songLength(m.ms)}</span>
+                    {kept ? <span className="trk-x" aria-label="In your music" title="In your music">✓</span> : (
+                      <button className="trk-x" type="button" title="Add to my music" aria-label={`Add ${m.title} to my music`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addSong(user, music, { ...m, addedAt: Date.now() }).then(() => toast(`“${m.title}” added to your music`)).catch(fail);
+                        }}>+</button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 // Checks every access level against firestore.rules using the Firebase emulator.
 // Run with:  npm run test:rules   (needs Java 21+ installed)
+import assert from 'node:assert/strict';
 import { after, before, beforeEach, describe, test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
@@ -597,5 +598,108 @@ describe('chat messages', () => {
   test('cannot edit their message', async () => {
     await seed('m4', 0, 'reader');
     await assertFails(edit(msg('m4')));
+  });
+});
+
+describe('partners', () => {
+  const LETTER = 'letter1';
+  const me = (who) => people[who];
+  const name = (who, partner) => ({ email: me(who).email, name: who, partnerEmail: me(partner).email, createdAt: serverTimestamp() });
+  // who names partner (as they would in the app)
+  const ask = (who, partner) => setDoc(doc(as(who), 'partners', me(who).uid), name(who, partner));
+  const link = async () => {
+    await assertSucceeds(ask('owner', 'stranger'));
+    await assertSucceeds(ask('stranger', 'owner'));
+  };
+  const seedLetter = () => env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'lists', LETTER), {
+    title: 'To you', kind: 'letter', body: 'Dear', ownerId: 'owner', ownerEmail: 'owner@test.com', ownerName: 'Owner',
+    roles: {}, memberEmails: [], createdAt: new Date(), updatedAt: new Date(),
+  }));
+  const ownersLists = (who) => getDocs(query(collection(as(who), 'lists'), where('ownerId', '==', 'owner')));
+
+  test('asking alone shares nothing', async () => {
+    await assertSucceeds(ask('owner', 'stranger'));
+    await assertFails(ownersLists('stranger'));
+    await assertFails(getDoc(doc(as('stranger'), 'lists', LIST, 'tasks', 't1')));
+  });
+  test('the person asked can see the request', async () => {
+    await ask('owner', 'stranger');
+    const s = await assertSucceeds(getDocs(query(collection(as('stranger'), 'partners'), where('partnerEmail', '==', 'stranger@test.com'))));
+    assert.equal(s.size, 1);
+  });
+  test('nobody else can see a request', async () => {
+    await ask('owner', 'stranger');
+    await assertFails(getDoc(doc(as('reader'), 'partners', 'owner')));
+  });
+  test('cannot write a partner record for someone else', () =>
+    assertFails(setDoc(doc(as('stranger'), 'partners', 'owner'), name('stranger', 'owner'))));
+  test('cannot name yourself', () =>
+    assertFails(setDoc(doc(as('owner'), 'partners', 'owner'), { ...name('owner', 'stranger'), partnerEmail: 'owner@test.com' })));
+
+  test('linked partners see every list and letter, tasks and comments', async () => {
+    await seedLetter();
+    await link();
+    const s = await assertSucceeds(ownersLists('stranger'));
+    assert.equal(s.size, 2);
+    await assertSucceeds(getDocs(collection(as('stranger'), 'lists', LIST, 'tasks')));
+    await assertSucceeds(getDocs(collection(as('stranger'), 'lists', LIST, 'comments')));
+  });
+  test('a partner can add, change and delete tasks, comment, and write in letters', async () => {
+    await seedLetter();
+    await link();
+    const db = as('stranger');
+    await assertSucceeds(addDoc(collection(db, 'lists', LIST, 'tasks'), task('stranger')));
+    await assertSucceeds(updateDoc(doc(db, 'lists', LIST, 'tasks', 't1'), { done: true, ...stamp('stranger') }));
+    await assertSucceeds(addDoc(collection(db, 'lists', LIST, 'comments'),
+      { text: 'Me too', userId: 'stranger', userName: 's', userEmail: 'stranger@test.com', createdAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(db, 'lists', LETTER), { body: 'Dear you', updatedAt: serverTimestamp() }));
+    await assertSucceeds(deleteDoc(doc(db, 'lists', LIST, 'tasks', 't1')));
+  });
+  test('a partner cannot delete, rename or reshare the list', async () => {
+    await link();
+    const db = as('stranger');
+    await assertFails(deleteDoc(doc(db, 'lists', LIST)));
+    await assertFails(updateDoc(doc(db, 'lists', LIST), { title: 'Mine now', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db, 'lists', LIST), { archived: true, updatedAt: serverTimestamp() }));
+  });
+  test('a partner sees the other\'s music and activity', async () => {
+    await link();
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', 'owner'), { music: [] });
+      await setDoc(doc(ctx.firestore(), 'users', 'owner', 'log', 'l1'), { kind: 'task-done', seen: false, createdAt: new Date() });
+    });
+    await assertSucceeds(getDoc(doc(as('stranger'), 'users', 'owner')));
+    await assertSucceeds(getDocs(collection(as('stranger'), 'users', 'owner', 'log')));
+    await assertFails(updateDoc(doc(as('stranger'), 'users', 'owner', 'log', 'l1'), { seen: true }));
+  });
+  test('it works both ways', async () => {
+    await link();
+    await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'lists', 'theirs'), {
+      title: 'Garden', ownerId: 'stranger', ownerEmail: 'stranger@test.com', ownerName: 'S',
+      roles: {}, memberEmails: [], createdAt: new Date(), updatedAt: new Date(),
+    }));
+    await assertSucceeds(getDoc(doc(as('owner'), 'lists', 'theirs')));
+  });
+  test('unlinking stops it straight away', async () => {
+    await link();
+    await assertSucceeds(deleteDoc(doc(as('stranger'), 'partners', 'stranger')));
+    await assertFails(ownersLists('stranger'));
+    await assertFails(getDoc(doc(as('owner'), 'users', 'stranger')));
+  });
+  test('the person asked can decline', async () => {
+    await ask('owner', 'stranger');
+    await assertSucceeds(deleteDoc(doc(as('stranger'), 'partners', 'owner')));
+  });
+  test('naming someone else breaks the link', async () => {
+    await link();
+    await assertSucceeds(ask('owner', 'reader'));
+    await assertFails(ownersLists('stranger'));
+  });
+  test('the owner can tell their partner about a change', async () => {
+    await link();
+    await assertSucceeds(addDoc(collection(as('owner'), 'activity'), {
+      to: 'stranger@test.com', listId: LIST, listTitle: 'Moving house', kind: 'task-done', text: 'A task', detail: '',
+      fromName: 'Owner', fromEmail: 'owner@test.com', seen: false, createdAt: serverTimestamp(),
+    }));
   });
 });

@@ -46,8 +46,8 @@ export const ACT = {
   },
   'access-removed': { label: 'Access removed', gone: true, did: () => 'removed you from' },
   'member-left': { label: 'Member left', did: () => 'left' },
-  'music-add': { label: 'Song added', group: 'music', noList: true, did: (n) => `added ${quote(n.text)} to My music` },
-  'music-remove': { label: 'Song removed', group: 'music', noList: true, did: (n) => `removed ${quote(n.text)} from My music` },
+  'music-add': { label: 'Song added', group: 'music', noList: true, did: (n) => `added ${quote(n.text)} to ${n.partner ? 'their music' : 'My music'}` },
+  'music-remove': { label: 'Song removed', group: 'music', noList: true, did: (n) => `removed ${quote(n.text)} from ${n.partner ? 'their music' : 'My music'}` },
   'music-play': {
     label: 'Now playing', group: 'music', noList: true,
     did: (n) => (PLAYED[n.detail] || ((t) => `started playing ${t}`))(quote(n.text)),
@@ -56,7 +56,8 @@ export const ACT = {
 };
 
 // What the person did, worded for whose activity it is
-export const didText = (n) => ((n.self && ACT[n.kind].mine) || ACT[n.kind].did)(n);
+// (my partner's own activity reads like mine does, just with their name: "changed amani@…'s access", not "your")
+export const didText = (n) => (((n.self || n.partner) && ACT[n.kind].mine) || ACT[n.kind].did)(n);
 
 export const isComment = (n) => ACT[n.kind]?.group === 'comments';
 export const who = (n) => (n.self ? 'You' : n.from.displayName || n.from.email);

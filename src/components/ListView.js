@@ -168,7 +168,7 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
                 Share
               </button>
             </>
-          ) : (
+          ) : role === 'partner' ? null : (
             <button className="btn" type="button" onClick={() => onLeave(list)}>Leave list</button>
           )}
           {menu}
@@ -184,7 +184,11 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
 
       {!isOwner && (
         <div className="banner">
-          You have <b>{roleLabel(role)}</b> access. {PERMISSIONS[role]?.desc}
+          {role === 'partner' ? (
+            <>Your partner <b>{list.ownerName || list.ownerEmail}</b>&apos;s list. You can change everything in it; only they can delete, rename or share it.</>
+          ) : (
+            <>You have <b>{roleLabel(role)}</b> access. {PERMISSIONS[role]?.desc}</>
+          )}
         </div>
       )}
 

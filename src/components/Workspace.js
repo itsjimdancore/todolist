@@ -28,8 +28,10 @@ import {
   watchSharedLists,
   markListKinds,
   watchMusic,
+  watchPartnerLists,
   watchSpotify,
 } from '@/lib/data';
+import { usePartner } from '@/lib/partner';
 import { roleLabel } from '@/lib/permissions';
 import { pausePush, refreshPush } from '@/lib/push';
 import { Avatar, colorFor, displayName, toDate } from '@/lib/people';
@@ -48,6 +50,7 @@ import Letters from './Letters';
 import LetterView from './LetterView';
 import Loading from './Loading';
 import Music from './Music';
+import Partner from './Partner';
 import MusicPlayer from './MusicPlayer';
 import { ToastProvider, useToast } from './Toast';
 import { UpdateProvider } from './UpdateBanner';
@@ -66,7 +69,7 @@ export default function Workspace(props) {
 function initialView() {
   const q = new URLSearchParams(window.location.search);
   if (q.get('chat') === '1') return 'chat'; // opened from a chat message's device notification
-  if (['calendar', 'notifications', 'letters', 'music', 'chat'].includes(q.get('view'))) return q.get('view');
+  if (['calendar', 'notifications', 'letters', 'music', 'chat', 'partner'].includes(q.get('view'))) return q.get('view');
   return q.get('view') === 'board' || !q.get('list') ? 'board' : 'list';
 }
 
@@ -198,6 +201,29 @@ function WorkspaceInner({ user }) {
   const [music, setMusic] = useState([]);
   useEffect(() => watchMusic(user.uid, setMusic), [user.uid]);
 
+  // ---- my partner (lib/partner.js): once linked, all their lists and letters, music and activity are mine to see too
+  const partnerApi = usePartner(user);
+  const partner = partnerApi.partner;
+  const partnerUid = partner?.uid || null;
+  const [partnerLists, setPartnerLists] = useState([]);
+  useEffect(() => {
+    setPartnerLists([]);
+    if (!partnerUid) return undefined;
+    return watchPartnerLists(partnerUid, setPartnerLists, () => setPartnerLists([]));
+  }, [partnerUid]);
+  const [partnerMusic, setPartnerMusic] = useState([]);
+  useEffect(() => {
+    setPartnerMusic([]);
+    return partnerUid ? watchMusic(partnerUid, setPartnerMusic) : undefined;
+  }, [partnerUid]);
+  const [partnerLog, setPartnerLog] = useState([]);
+  useEffect(() => {
+    setPartnerLog([]);
+    return partnerUid ? watchLog(partnerUid, setPartnerLog) : undefined;
+  }, [partnerUid]);
+  const partnerPerson = useMemo(() => (partner ? { email: partner.email, displayName: partner.name } : null), [partner]);
+  const partnerFirst = partner ? displayName(partnerPerson).split(' ')[0] : '';
+
   const lists = useMemo(() => {
     // wait for both, so "where I left off" can be a list someone shared with me
     if (owned === null || shared === null) return null;
@@ -205,8 +231,11 @@ function WorkspaceInner({ user }) {
       ...owned.map((l) => ({ ...l, role: 'owner' })),
       ...shared.map((l) => ({ ...l, role: l.roles?.[email] })).filter((l) => l.role),
     ];
+    // my partner's (unless it's also shared with me directly; then it's already here)
+    const have = new Set(all.map((l) => l.id));
+    if (partnerUid) all.push(...partnerLists.filter((l) => !have.has(l.id)).map((l) => ({ ...l, role: 'partner' })));
     return all.sort((a, b) => toDate(b.updatedAt) - toDate(a.updatedAt));
-  }, [owned, shared, email]);
+  }, [owned, shared, email, partnerLists, partnerUid]);
 
   // ---- first load: pick the list from the link, else the one I had open last
   useEffect(() => {
@@ -264,7 +293,7 @@ function WorkspaceInner({ user }) {
     if (activeId) url.searchParams.set('list', activeId);
     url.searchParams.delete('reply'); // used once, on arrival from a comment's device notification
     url.searchParams.delete('chat'); // likewise, from a chat message's
-    if (['board', 'calendar', 'notifications', 'letters', 'music', 'chat'].includes(view)) url.searchParams.set('view', view);
+    if (['board', 'calendar', 'notifications', 'letters', 'music', 'chat', 'partner'].includes(view)) url.searchParams.set('view', view);
     else url.searchParams.delete('view');
     const n = nav.current;
     const moved = n.ready && !n.popping && (view !== n.view || (view === 'list' && activeId !== n.list && n.list));
@@ -387,7 +416,7 @@ function WorkspaceInner({ user }) {
   const active = lists?.find((l) => l.id === activeId) || null;
   // the ‹ back link above an open list's (or letter's) name: named after the page Back returns to,
   // or the page it belongs to when it was opened straight from a link
-  const PAGE_NAMES = { board: 'My List', calendar: 'Calendar', letters: 'Love letters', chat: 'Chat', music: 'Music', notifications: 'Notifications' };
+  const PAGE_NAMES = { board: 'My List', calendar: 'Calendar', letters: 'Love letters', chat: 'Chat', music: 'Music', notifications: 'Notifications', partner: 'Partner' };
   const backLabel = active?.kind === 'letter' ? 'Love letters' // a letter always goes back to the Love letters page
     : PAGE_NAMES[backFrom] || (backFrom === 'list' ? 'Back' : 'My List');
   const back = { label: backLabel, onClick: goBack };
@@ -402,6 +431,9 @@ function WorkspaceInner({ user }) {
   // own section on My List and in the Calendar, never as a list card or in the sidebar
   const todoLists = useMemo(() => (lists || []).filter((l) => l.kind !== 'letter' && !isUnplaced(l)), [lists]);
   const unplaced = useMemo(() => (lists || []).find((l) => isUnplaced(l) && l.ownerId === user.uid) || null, [lists, user.uid]);
+  // my partner's Unplaced tasks show on the Calendar with mine
+  const partnerUnplaced = useMemo(() => (lists || []).find((l) => isUnplaced(l) && l.role === 'partner') || null, [lists]);
+  const unplacedAll = [unplaced, partnerUnplaced].filter(Boolean);
   const letters = useMemo(() => (lists || []).filter((l) => l.kind === 'letter'), [lists]);
   const arranged = arrange(todoLists);
   // Tasks of every open list, live: the calendar shows them, the sidebar counts what's due
@@ -412,16 +444,18 @@ function WorkspaceInner({ user }) {
   const sharedCalLists = calsWithMe.flatMap(({ share, lists: ls }) => ls
     .filter((l) => !l.archived && !mineIds.has(l.id))
     .map((l) => ({ ...l, role: 'write', calOwner: (share.ownerName || share.ownerEmail).split(' ')[0], calOwnerUid: share.ownerUid })));
-  const calLists = [...openLists, ...(unplaced ? [unplaced] : []), ...sharedCalLists];
+  const calLists = [...openLists, ...unplacedAll, ...sharedCalLists];
   // every list's tasks (archived too, so My List can search them); the calendar only uses the open lists'
-  const allTasks = useAllTasks([...arranged, ...(unplaced ? [unplaced] : []), ...sharedCalLists]);
+  const allTasks = useAllTasks([...arranged, ...unplacedAll, ...sharedCalLists]);
   // the sidebar's count is for my own lists only
   const dueNow = dueNowCount(taskEntries(unplaced ? [...openLists, unplaced] : openLists, allTasks));
   // Shares + due / overdue reminders, for the bell and the Notifications page
-  const notif = useNotifications({ invites, activity, log, me, user, lists, tasksByList: allTasks, uid: user.uid, openListId: view === 'list' ? activeId : null });
+  const notif = useNotifications({ invites, activity, log, me, user, lists, tasksByList: allTasks, uid: user.uid, openListId: view === 'list' ? activeId : null,
+    partnerLog, partner: partnerPerson });
   const showNotifications = () => { setView('notifications'); setMenuOpen(false); };
   const mine = arranged.filter((l) => l.role === 'owner' && !l.archived);
-  const others = arranged.filter((l) => l.role !== 'owner' && !l.archived);
+  const others = arranged.filter((l) => l.role !== 'owner' && l.role !== 'partner' && !l.archived);
+  const partners = arranged.filter((l) => l.role === 'partner' && !l.archived);
   // From dragging on My List: the cards I moved, then everything else in its current place
   const onReorder = (ids) => {
     const moved = new Set(ids);
@@ -445,8 +479,9 @@ function WorkspaceInner({ user }) {
       if (l.ownerEmail && l.ownerEmail !== email) m.set(l.ownerEmail, { email: l.ownerEmail, displayName: l.ownerName });
       for (const e of l.memberEmails || []) if (e !== email && !m.has(e)) m.set(e, { email: e });
     }
+    if (partnerPerson && !m.has(partnerPerson.email)) m.set(partnerPerson.email, partnerPerson);
     return [...m.values()].sort((a, b) => displayName(a).localeCompare(displayName(b)));
-  }, [lists, email]);
+  }, [lists, email, partnerPerson]);
 
   return (
     <div className={rail ? 'shell rail' : 'shell'}>
@@ -516,6 +551,16 @@ function WorkspaceInner({ user }) {
                 <Icon name="music" /><span className="lbl">Music</span>
                 {music.length > 0 && <span className="count">{music.length}</span>}
               </button>
+              <button type="button" className={view === 'partner' ? 'nav-i on' : 'nav-i'} title="Partner"
+                aria-current={view === 'partner' ? 'page' : undefined}
+                onClick={() => { setView('partner'); setMenuOpen(false); }}>
+                <Icon name="partner" /><span className="lbl">{partner ? `Partner · ${partnerFirst}` : 'Partner'}</span>
+                {partnerApi.requests.length > 0 && (
+                  <span className="count unread-count" aria-label={`${partnerApi.requests.length} partner request${partnerApi.requests.length > 1 ? 's' : ''}`}>
+                    {partnerApi.requests.length}
+                  </span>
+                )}
+              </button>
               <button type="button" className={view === 'notifications' ? 'nav-i on' : 'nav-i'} title="Notifications"
                 aria-current={view === 'notifications' ? 'page' : undefined} onClick={showNotifications}>
                 <Icon name="bell" /><span className="lbl">Notifications</span>
@@ -527,6 +572,10 @@ function WorkspaceInner({ user }) {
               empty={lists === null ? <Loading variant="inline" /> : 'Press “New list” to create your first one.'} />
             <ListGroup title="Shared with me" lists={others} {...group}
               empty={lists === null ? '' : 'Lists people share with you appear here.'} />
+            {partner && (
+              <ListGroup title={`${partnerFirst}'s lists`} lists={partners} {...group}
+                empty={`${partnerFirst} hasn't made any lists yet.`} />
+            )}
 
             {archived.length > 0 && (
               <div className="group">
@@ -566,9 +615,12 @@ function WorkspaceInner({ user }) {
         ) : view === 'chat' ? (
           <Chat api={chatApi} user={user} contacts={contacts} back={back} lists={lists || []} onOpenList={pick} />
         ) : view === 'music' ? (
-          <Music user={user} music={music} nowPlaying={nowPlaying || ''} />
+          <Music user={user} music={music} nowPlaying={nowPlaying || ''}
+            partner={partner ? { name: partnerFirst, music: partnerMusic } : null} />
+        ) : view === 'partner' ? (
+          <Partner user={user} api={partnerApi} contacts={contacts} />
         ) : view === 'letters' ? (
-          <Letters letters={letters} contacts={contacts} favorites={favorites} actions={actions} onOpen={pick}
+          <Letters letters={letters} contacts={contacts} favorites={favorites} actions={actions} onOpen={pick} me={email}
             onNew={() => setCreating('letter')} />
         ) : view === 'board' ? (
           <Board lists={arranged} tasksByList={allTasks} favorites={favorites} actions={actions} onOpen={pick} onNew={() => setCreating('list')}
@@ -657,6 +709,7 @@ const ICONS = {
   bell: <><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></>,
   chat: <><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.1A8 8 0 1 1 20 12z" /></>,
   music: <><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></>,
+  partner: <><circle cx="8" cy="8" r="3" /><circle cx="16" cy="8" r="3" /><path d="M2 20a6 6 0 0 1 12 0M10 20a6 6 0 0 1 12 0" /></>,
 };
 
 function Icon({ name }) {

@@ -21,13 +21,16 @@ const stopKey = (listId, t) => `stop:${listId}/${t.id}:${t.due}`;
 // Everything that's a notification, newest first:
 //  • share    — someone shared a list with me (stored in Firestore, read state syncs across devices)
 //  • mine     — what I did myself ("You created …", "You added a song …"), from my own log; counts as new too
+//  • partner  — what my partner did (their own log), in its own tab: never new, never in the bell, so a change
+//               they made to my list isn't shown twice
 //  • activity — someone else did something on a list or letter I'm on: a comment, a task added / done /
 //               changed / deleted, a rename, someone joining or leaving… (also stored in Firestore; see ACT)
 //  • due      — one of my open tasks is due today
 //  • overdue  — an open task is past its date: comes back new every day until "Stop reminding"
 // Reminders are worked out from the tasks; their read / cleared state is saved to my account, so every device agrees.
 // ---------------------------------------------------------------------------
-export function useNotifications({ invites, activity = [], log = [], me = null, user = null, lists, tasksByList, uid, openListId = null }) {
+export function useNotifications({ invites, activity = [], log = [], me = null, user = null, lists, tasksByList, uid, openListId = null,
+  partnerLog = [], partner = null }) {
   const toast = useToast();
   const [local, setLocal] = useState({ read: [], gone: [] });
   useEffect(() => watchReminderState(uid, (saved) => {
@@ -124,6 +127,26 @@ export function useNotifications({ invites, activity = [], log = [], me = null, 
     return out.sort((a, b) => b.at - a.at);
   }, [invites, activity, log, me, lists, tasksByList, local, today]);
 
+  // my partner's activity, read-only (it's theirs to mark or remove)
+  const partnerItems = useMemo(() => {
+    if (!partner) return [];
+    const byId = new Map((lists || []).map((l) => [l.id, l]));
+    const out = [];
+    for (const a of partnerLog) {
+      const act = ACT[a.kind];
+      if (!act) continue;
+      const list = a.listId ? byId.get(a.listId) : null;
+      out.push({
+        id: `partner:${a.id}`, kind: a.kind, partner: true, read: true, at: toDate(a.createdAt),
+        music: act.group === 'music', listId: a.listId || null, listTitle: list?.title || a.listTitle || '', role: list?.role,
+        gone: !act.noList && !list, letter: list ? list.kind === 'letter' : !!a.letter,
+        text: a.text || '', detail: a.detail || '', target: a.target || '',
+        from: partner,
+      });
+    }
+    return out.sort((a, b) => b.at - a.at);
+  }, [partnerLog, partner, lists]);
+
   // A share or a comment that arrives while the app is open also pops a toast
   // (not for comments on the list I'm looking at: I can see those already)
   const known = useRef(null);
@@ -158,7 +181,7 @@ export function useNotifications({ invites, activity = [], log = [], me = null, 
     else saveLocal((p) => ({ read: p.read.filter((x) => x !== n.id), gone: [...new Set([...p.gone, n.id])] }));
   };
   // a comment notification: can I answer it from here? (someone else's comment, on a list I can still comment on)
-  const canReply = (n) => !!user && !n.self && !n.gone && (n.kind === 'comment' || n.kind === 'comment-edit')
+  const canReply = (n) => !!user && !n.self && !n.partner && !n.gone && (n.kind === 'comment' || n.kind === 'comment-edit')
     && canComment((lists || []).find((l) => l.id === n.listId)?.role);
   // ...and answer it: posts a comment on that list (everyone on it is told, as usual) and marks this one read
   const reply = async (n, text) => {
@@ -216,7 +239,7 @@ export function useNotifications({ invites, activity = [], log = [], me = null, 
     });
   };
 
-  return { items, unread: items.filter((n) => !n.read).length, setRead, dismiss, stopReminding, canReply, reply, markAllRead };
+  return { items, unread: items.filter((n) => !n.read).length, setRead, dismiss, stopReminding, canReply, reply, markAllRead, partnerItems, partner };
 }
 
 // ---------------------------------------------------------------------------
@@ -393,6 +416,7 @@ function QuickReply({ n, api, compact }) {
 
 // small icon buttons that appear on a row
 function RowActions({ n, api }) {
+  if (n.partner) return null; // my partner's activity: theirs to mark or remove
   return (
     <div className="nt-acts">
       {n.stopId && (
@@ -547,11 +571,17 @@ export function NotificationsPage({ api, user, onOpen }) {
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [settings, setSettings] = useState(false);
-  const { items, unread } = api;
+  const { items, unread, partnerItems = [], partner } = api;
   const q = query.trim().toLowerCase();
   const text = (n) => `${n.listTitle} ${n.task?.text || ''} ${n.text || ''} ${n.detail || ''} ${n.from?.displayName || ''} ${n.from?.email || ''}`.toLowerCase();
-  const shown = items.filter((n) => FILTERS[filter].test(n) && (!q || text(n).includes(q)));
-  const count = (k) => items.filter(FILTERS[k].test).length;
+  // with a partner: a tab of everything they did (their own activity, read-only)
+  const filters = partner
+    ? { ...FILTERS, partner: { label: `${(partner.displayName || partner.email).split(/[\s@]/)[0]}'s activity`, test: () => true } }
+    : FILTERS;
+  const tab = filters[filter] ? filter : 'all';
+  const source = tab === 'partner' ? partnerItems : items;
+  const shown = source.filter((n) => filters[tab].test(n) && (!q || text(n).includes(q)));
+  const count = (k) => (k === 'partner' ? partnerItems.length : items.filter(filters[k].test).length);
   const stats = [
     { label: 'Unread', value: unread, tone: 'accent' },
     { label: 'Updates', value: count('updates') + count('comments'), tone: '' },
@@ -590,8 +620,8 @@ export function NotificationsPage({ api, user, onOpen }) {
 
       <div className="ntp-tools">
         <div className="ntp-filters" role="tablist" aria-label="Filter notifications">
-          {Object.entries(FILTERS).map(([k, f]) => (
-            <button key={k} type="button" role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>
+          {Object.entries(filters).map(([k, f]) => (
+            <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setFilter(k)}>
               {f.label}<span>{count(k)}</span>
             </button>
           ))}
@@ -606,7 +636,7 @@ export function NotificationsPage({ api, user, onOpen }) {
       <div className="ntp-list">
         <UpdateCard />
         {shown.length === 0 ? (
-          <Empty unreadOnly={filter === 'unread' && !q} filtered={filter !== 'all' || !!q} />
+          <Empty unreadOnly={tab === 'unread' && !q} filtered={tab !== 'all' || !!q} />
         ) : (
           groupByDay(shown).map((g) => (
             <section key={g.label} className="ntp-group" aria-label={g.label}>

@@ -118,13 +118,26 @@ service cloud.firestore {
       return hasEmail() && kindOf(list) == 'list'
         && exists(/databases/$(database)/documents/calendarShares/$(list.ownerId + '_' + myEmail()));
     }
-    // roleIn, or 'write' through a shared calendar
+    // Partners: partners/{uid} says whose partner that person wants to be (one at a time). Two people are partners
+    // once each has named the other. Then each sees and changes everything the other owns: every list and letter,
+    // music and activity. Only the owner can still delete, rename, archive or share their own lists.
+    function partnerRef(uid) { return /databases/$(database)/documents/partners/$(uid); }
+    function isPartner(uid) {
+      return hasEmail() && uid != request.auth.uid
+        && exists(partnerRef(uid)) && exists(partnerRef(request.auth.uid))
+        && get(partnerRef(uid)).data.partnerEmail == myEmail()
+        && get(partnerRef(request.auth.uid)).data.partnerEmail == get(partnerRef(uid)).data.email;
+    }
+    // roleIn, or 'write' through a shared calendar, or 'partner' (edit and comment) on my partner's lists and letters
     function effRole(list) {
-      return roleIn(list) != null ? roleIn(list) : calShared(list) ? 'write' : null;
+      return roleIn(list) != null ? roleIn(list)
+        : calShared(list) ? 'write'
+        : isPartner(list.ownerId) ? 'partner'
+        : null;
     }
     function canRead(role)    { return role != null; }
-    function canWrite(role)   { return role in ['owner', 'write', 'readwrite']; }
-    function canComment(role) { return role in ['owner', 'comment', 'readwrite']; }
+    function canWrite(role)   { return role in ['owner', 'write', 'readwrite', 'partner']; }
+    function canComment(role) { return role in ['owner', 'comment', 'readwrite', 'partner']; }
 
     function validRoles(d) {
       return d.roles is map
@@ -157,7 +170,9 @@ service cloud.firestore {
 
     // ---------- users ----------
     match /users/{uid} {
-      allow read, delete: if signedIn() && request.auth.uid == uid;
+      // my partner can read mine too (for my music)
+      allow read: if signedIn() && (request.auth.uid == uid || isPartner(uid));
+      allow delete: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['email', 'displayName', 'lastListId', 'favorites', 'listOrder', 'spotify', 'music', 'notify', 'reminders', 'createdAt', 'updatedAt'])
         // due / overdue reminders I've marked read or removed: { read: [ids], gone: [ids] }
@@ -216,7 +231,9 @@ service cloud.firestore {
           && d.get('letter', false) is bool
           && d.seen == false && d.createdAt == request.time;
       }
-      allow read, delete: if signedIn() && request.auth.uid == uid;
+      // my partner sees my activity too (only I can mark it read or remove it)
+      allow read: if signedIn() && (request.auth.uid == uid || isPartner(uid));
+      allow delete: if signedIn() && request.auth.uid == uid;
       allow create: if signedIn() && request.auth.uid == uid && validLog(request.resource.data);
       allow update: if signedIn() && request.auth.uid == uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seen'])
@@ -232,6 +249,8 @@ service cloud.firestore {
         // the owner shared their calendar with me (the app asks for kind == 'list')
         || (hasEmail() && resource.data.kind == 'list'
           && exists(/databases/$(database)/documents/calendarShares/$(resource.data.ownerId + '_' + myEmail())))
+        // the owner is my partner: all their lists and letters (the app asks for ownerId == theirs)
+        || isPartner(resource.data.ownerId)
       );
 
       // anyone signed in can create their own list (shared with nobody yet)
@@ -251,8 +270,8 @@ service cloud.firestore {
         // write roles (and shared calendars): only bump "last changed" when they edit tasks
         || (canWrite(effRole(resource.data))
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']))
-        // write roles on a love letter: edit the letter itself
-        || (canWrite(roleIn(resource.data)) && kindOf(resource.data) == 'letter'
+        // write roles (and my partner) on a love letter: edit the letter itself
+        || (canWrite(effRole(resource.data)) && kindOf(resource.data) == 'letter'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['body', 'updatedAt'])
           && validBody(request.resource.data))
         // any member: leave the list (remove only yourself, and record that you left)
@@ -312,14 +331,14 @@ service cloud.firestore {
             || (request.auth.uid in before && after.size() == before.size() - 1 && after.toSet() == before.toSet().difference(me))
           );
         }
-        allow read: if canComment(roleIn(listData(listId)));
-        allow create: if canComment(roleIn(listData(listId)))
+        allow read: if canComment(effRole(listData(listId)));
+        allow create: if canComment(effRole(listData(listId)))
           && request.resource.data.keys().hasOnly(['text', 'userId', 'userName', 'userEmail', 'createdAt'])
           && request.resource.data.userId == request.auth.uid
           && request.resource.data.text is string
           && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 2000;
         // edit your own comment (just its words), while you can still comment; it's marked as edited
-        allow update: if canComment(roleIn(listData(listId))) && (
+        allow update: if canComment(effRole(listData(listId))) && (
           (resource.data.userId == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
             && request.resource.data.text is string
@@ -460,6 +479,23 @@ service cloud.firestore {
       allow delete: if hasEmail() && (resource.data.ownerUid == request.auth.uid || resource.data.to == myEmail());
     }
 
+    // ---------- partners/{uid}: who I want as my partner (one at a time). See isPartner. ----------
+    // Asking: I write mine naming them. They accept by writing theirs naming me; then everything is shared both ways.
+    // Either of us unlinks by deleting our own; the person I named can also decline (delete mine).
+    match /partners/{uid} {
+      function validPartner(d) {
+        return d.keys().hasOnly(['email', 'name', 'partnerEmail', 'createdAt'])
+          && d.email == myEmail()
+          && d.name is string && d.name.size() <= 120
+          && d.partnerEmail is string && d.partnerEmail.size() >= 3 && d.partnerEmail.size() <= 254
+          && d.partnerEmail == d.partnerEmail.lower() && d.partnerEmail != myEmail()
+          && d.createdAt == request.time;
+      }
+      allow read: if hasEmail() && (uid == request.auth.uid || resource.data.partnerEmail == myEmail());
+      allow create, update: if hasEmail() && uid == request.auth.uid && validPartner(request.resource.data);
+      allow delete: if hasEmail() && (uid == request.auth.uid || resource.data.partnerEmail == myEmail());
+    }
+
     match /activity/{activityId} {
       function mayActivity(kind, role) {
         return (kind in ['comment', 'comment-edit', 'comment-delete'] && canComment(role))
@@ -467,10 +503,15 @@ service cloud.firestore {
                        'task-restore', 'task-delete', 'task-link', 'task-unlink', 'letter-edit'] && canWrite(role))
           || (kind in ['list-rename', 'list-archive', 'list-unarchive', 'list-delete',
                        'member-added', 'member-removed', 'access-changed', 'access-removed'] && role == 'owner')
-          || (kind == 'member-left' && role != null && role != 'owner');
+          || (kind == 'member-left' && role != null && !(role in ['owner', 'partner']));
+      }
+      // the owner's partner (the person the owner named) hears about everything on the owner's lists
+      function ownersPartner(list, to) {
+        return exists(partnerRef(list.ownerId)) && get(partnerRef(list.ownerId)).data.partnerEmail == to;
       }
       function mayReceive(kind, list, to) {
         return to == list.ownerEmail
+          || ownersPartner(list, to)
           || (kind in ['comment', 'comment-edit', 'comment-delete']
             ? list.roles.get(to, '') in ['comment', 'readwrite']
             : to in list.memberEmails);

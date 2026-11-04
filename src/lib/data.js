@@ -162,6 +162,11 @@ export function watchOwnedLists(uid, onData, onError) {
   return onSnapshot(query(collection(db(), 'lists'), where('ownerId', '==', uid)), (s) => onData(withId(s)), onError);
 }
 
+// Every list and letter my partner owns (live; firestore.rules lets me once we're linked)
+export function watchPartnerLists(partnerUid, onData, onError) {
+  return onSnapshot(query(collection(db(), 'lists'), where('ownerId', '==', partnerUid)), (s) => onData(withId(s)), onError);
+}
+
 // Lists shared with my email (live)
 export function watchSharedLists(email, onData, onError) {
   return onSnapshot(
@@ -604,6 +609,10 @@ export function deleteComment(list, comment, user) {
 //   leaving            member-left
 const canSeeComments = (permission) => permission === 'comment' || permission === 'readwrite';
 
+// My partner's email while we're linked (lib/partner.js keeps it current): changes to my lists tell them too
+let myPartner = null;
+export const setPartnerForNotify = (email) => { myPartner = email; };
+
 // text: what it's about (a task, a comment); detail: the extra bit (old name, a date, someone's email)
 // only: just these people; skip: everyone except these
 // log: also note it in my own activity (off for the second half of a two-part change)
@@ -612,7 +621,8 @@ function notify(batch, list, user, kind, { text = '', detail = '', only = null, 
   if (log) logSelf(batch, user, kind, { text, detail, target: (only || []).join(', '), list });
   const roles = list.roles || {};
   const members = kind.startsWith('comment') ? Object.keys(roles).filter((e) => canSeeComments(roles[e])) : Object.keys(roles);
-  const to = (only || [list.ownerEmail, ...members]).filter((e) => e && e !== me && !skip.includes(e));
+  const partner = myPartner && list.ownerId === user.uid ? [myPartner] : [];
+  const to = (only || [list.ownerEmail, ...members, ...partner]).filter((e) => e && e !== me && !skip.includes(e));
   for (const email of new Set(to)) {
     const ref = doc(collection(db(), 'activity'));
     pushLater(batch, 'activity', ref.id);

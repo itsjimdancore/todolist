@@ -95,7 +95,7 @@ export default function LetterView({ list, role, user, contacts, back, focusComm
                 {recipient ? 'Recipient' : 'Send'}
               </button>
             </>
-          ) : (
+          ) : role === 'partner' ? null : (
             <button className="btn" type="button" onClick={() => onLeave(list)}>Leave letter</button>
           )}
           {menu}
@@ -111,7 +111,11 @@ export default function LetterView({ list, role, user, contacts, back, focusComm
 
       {!isOwner && (
         <div className="banner">
-          You have <b>{roleLabel(role)}</b> access. {letterDesc(role)}
+          {role === 'partner' ? (
+            <>Your partner <b>{list.ownerName || list.ownerEmail}</b>&apos;s letter. You can write in it; only they can delete it or choose who it&apos;s for.</>
+          ) : (
+            <>You have <b>{roleLabel(role)}</b> access. {letterDesc(role)}</>
+          )}
         </div>
       )}
 

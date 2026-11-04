@@ -42,17 +42,21 @@ export function WaxSeal() {
 const firstLine = (body) => (body || '').split('\n').map((s) => s.trim()).find(Boolean) || '';
 
 // The Love Letters page: the ones I wrote, and the ones written to me
-export default function Letters({ letters, contacts, favorites, actions, onOpen, onNew }) {
+export default function Letters({ letters, contacts, favorites, actions, onOpen, onNew, me = '' }) {
   const named = Object.fromEntries(contacts.map((c) => [c.email, c]));
   const nameFor = (email) => displayName(named[email] || { email });
   const open = letters.filter((l) => !l.archived);
   const mine = open.filter((l) => l.role === 'owner');
-  const forMe = open.filter((l) => l.role !== 'owner');
+  // my partner's letters (lib/partner.js) are theirs, not written to me, unless they're for me
+  const isForMe = (l) => l.role !== 'owner' && (l.role !== 'partner' || (l.memberEmails || []).includes(me));
+  const forMe = open.filter(isForMe);
+  const partners = open.filter((l) => l.role === 'partner' && !isForMe(l));
+  const partnerName = partners[0] ? (partners[0].ownerName || partners[0].ownerEmail).split(' ')[0] : '';
   const archived = letters.filter((l) => l.archived);
 
   const card = (l) => {
     const to = l.memberEmails?.[0];
-    const who = l.role === 'owner'
+    const who = l.role === 'owner' || (l.role === 'partner' && !isForMe(l))
       ? (to ? `To ${nameFor(to)}` : 'Not sent yet')
       : `From ${l.ownerName || l.ownerEmail}`;
     const preview = firstLine(l.body);
@@ -60,7 +64,7 @@ export default function Letters({ letters, contacts, favorites, actions, onOpen,
       <BurntPaper key={l.id} seed={l.id} className="letter-card" role="button" tabIndex={0}
         onClick={() => onOpen(l.id)} onKeyDown={(e) => e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen(l.id))}
         aria-label={`${l.title}, ${who}`}>
-        {l.role !== 'owner' && <WaxSeal />}
+        {isForMe(l) && <WaxSeal />}
         <div className="letter-card-h">
           <h3>{l.title}</h3>
           {favorites.has(l.id) && <span className="star" aria-label="Favourite">★</span>}
@@ -108,6 +112,13 @@ export default function Letters({ letters, contacts, favorites, actions, onOpen,
           <p className="muted letters-empty">Letters written to you appear here.</p>
         )}
       </section>
+
+      {partners.length > 0 && (
+        <section className="letters-sec" aria-label={`${partnerName}'s letters`}>
+          <h2 className="letters-h">{partnerName}&apos;s letters <span className="count">{partners.length}</span></h2>
+          <div className="letters">{partners.map(card)}</div>
+        </section>
+      )}
 
       {archived.length > 0 && (
         <section className="letters-sec" aria-label="Archived letters">

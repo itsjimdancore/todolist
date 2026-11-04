@@ -340,7 +340,9 @@ function ContactInfo({ name, other, person, lists, onClose, onOpenList }) {
   const letters = shared.filter((l) => l.kind === 'letter');
   const todo = shared.filter((l) => l.kind !== 'letter');
   const row = (l) => {
-    const access = l.role === 'owner' ? `Yours · ${name} can ${roleLabel(l.roles?.[other]).toLowerCase()}` : `${name}'s · you can ${roleLabel(l.role).toLowerCase()}`;
+    const access = l.role === 'owner' ? `Yours · ${name} can ${roleLabel(l.roles?.[other]).toLowerCase()}`
+      : l.role === 'partner' ? `${name}'s · you can change everything, as partners`
+      : `${name}'s · you can ${roleLabel(l.role).toLowerCase()}`;
     return (
       <li key={l.id}>
         <button type="button" className="ci-row" onClick={() => onOpenList?.(l.id)}>
