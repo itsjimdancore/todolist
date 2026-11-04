@@ -451,7 +451,8 @@ function WorkspaceInner({ user }) {
   const dueNow = dueNowCount(taskEntries(unplaced ? [...openLists, unplaced] : openLists, allTasks));
   // Shares + due / overdue reminders, for the bell and the Notifications page
   const notif = useNotifications({ invites, activity, log, me, user, lists, tasksByList: allTasks, uid: user.uid, openListId: view === 'list' ? activeId : null,
-    partnerLog, partner: partnerPerson });
+    partnerLog, partner: partnerPerson,
+    partnerAdded: partner ? { ...partnerPerson, uid: partner.uid, at: partner.at, both: partnerApi.both } : null });
   const showNotifications = () => { setView('notifications'); setMenuOpen(false); };
   const mine = arranged.filter((l) => l.role === 'owner' && !l.archived);
   const others = arranged.filter((l) => l.role !== 'owner' && l.role !== 'partner' && !l.archived);
@@ -466,7 +467,7 @@ function WorkspaceInner({ user }) {
   // a notification: its list, or (null) the Music page for music ones. A comment one opens the list on its
   // Comments, with the box ready to type a reply.
   const openNote = (id, o) => {
-    if (!id) { setView('music'); setMenuOpen(false); return; }
+    if (!id) { setView(o?.partner ? 'partner' : 'music'); setMenuOpen(false); return; }
     pick(id);
     setFocusComments(o?.comments ? { id, at: Date.now() } : null);
   };
@@ -555,10 +556,9 @@ function WorkspaceInner({ user }) {
                 aria-current={view === 'partner' ? 'page' : undefined}
                 onClick={() => { setView('partner'); setMenuOpen(false); }}>
                 <Icon name="partner" /><span className="lbl">{partner ? `Partner · ${partnerFirst}` : 'Partner'}</span>
-                {partnerApi.requests.length > 0 && (
-                  <span className="count unread-count" aria-label={`${partnerApi.requests.length} partner request${partnerApi.requests.length > 1 ? 's' : ''}`}>
-                    {partnerApi.requests.length}
-                  </span>
+                {/* someone added me and I haven't shared mine back yet */}
+                {partner && !partnerApi.both && (
+                  <span className="count unread-count" aria-label={`${partnerFirst} added you as their partner`}>1</span>
                 )}
               </button>
               <button type="button" className={view === 'notifications' ? 'nav-i on' : 'nav-i'} title="Notifications"

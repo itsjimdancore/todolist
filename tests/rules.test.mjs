@@ -605,48 +605,47 @@ describe('partners', () => {
   const LETTER = 'letter1';
   const me = (who) => people[who];
   const name = (who, partner) => ({ email: me(who).email, name: who, partnerEmail: me(partner).email, createdAt: serverTimestamp() });
-  // who names partner (as they would in the app)
-  const ask = (who, partner) => setDoc(doc(as(who), 'partners', me(who).uid), name(who, partner));
-  const link = async () => {
-    await assertSucceeds(ask('owner', 'stranger'));
-    await assertSucceeds(ask('stranger', 'owner'));
-  };
+  // who adds partner (as they would in the app)
+  const add = (who, partner) => setDoc(doc(as(who), 'partners', me(who).uid), name(who, partner));
   const seedLetter = () => env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'lists', LETTER), {
     title: 'To you', kind: 'letter', body: 'Dear', ownerId: 'owner', ownerEmail: 'owner@test.com', ownerName: 'Owner',
     roles: {}, memberEmails: [], createdAt: new Date(), updatedAt: new Date(),
   }));
+  const seedTheirs = () => env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'lists', 'theirs'), {
+    title: 'Garden', ownerId: 'stranger', ownerEmail: 'stranger@test.com', ownerName: 'S',
+    roles: {}, memberEmails: [], createdAt: new Date(), updatedAt: new Date(),
+  }));
   const ownersLists = (who) => getDocs(query(collection(as(who), 'lists'), where('ownerId', '==', 'owner')));
 
-  test('asking alone shares nothing', async () => {
-    await assertSucceeds(ask('owner', 'stranger'));
+  test('before being added, nothing is shared', async () => {
     await assertFails(ownersLists('stranger'));
     await assertFails(getDoc(doc(as('stranger'), 'lists', LIST, 'tasks', 't1')));
   });
-  test('the person asked can see the request', async () => {
-    await ask('owner', 'stranger');
-    const s = await assertSucceeds(getDocs(query(collection(as('stranger'), 'partners'), where('partnerEmail', '==', 'stranger@test.com'))));
-    assert.equal(s.size, 1);
-  });
-  test('nobody else can see a request', async () => {
-    await ask('owner', 'stranger');
-    await assertFails(getDoc(doc(as('reader'), 'partners', 'owner')));
-  });
-  test('cannot write a partner record for someone else', () =>
-    assertFails(setDoc(doc(as('stranger'), 'partners', 'owner'), name('stranger', 'owner'))));
-  test('cannot name yourself', () =>
-    assertFails(setDoc(doc(as('owner'), 'partners', 'owner'), { ...name('owner', 'stranger'), partnerEmail: 'owner@test.com' })));
-
-  test('linked partners see every list and letter, tasks and comments', async () => {
+  test('adding a partner shares every list and letter with them at once', async () => {
     await seedLetter();
-    await link();
+    await assertSucceeds(add('owner', 'stranger'));
     const s = await assertSucceeds(ownersLists('stranger'));
     assert.equal(s.size, 2);
     await assertSucceeds(getDocs(collection(as('stranger'), 'lists', LIST, 'tasks')));
     await assertSucceeds(getDocs(collection(as('stranger'), 'lists', LIST, 'comments')));
   });
+  test('the person added can see who added them', async () => {
+    await add('owner', 'stranger');
+    const s = await assertSucceeds(getDocs(query(collection(as('stranger'), 'partners'), where('partnerEmail', '==', 'stranger@test.com'))));
+    assert.equal(s.size, 1);
+  });
+  test('nobody else can see it', async () => {
+    await add('owner', 'stranger');
+    await assertFails(getDoc(doc(as('reader'), 'partners', 'owner')));
+  });
+  test('cannot add a partner for someone else', () =>
+    assertFails(setDoc(doc(as('stranger'), 'partners', 'owner'), name('stranger', 'owner'))));
+  test('cannot add yourself', () =>
+    assertFails(setDoc(doc(as('owner'), 'partners', 'owner'), { ...name('owner', 'stranger'), partnerEmail: 'owner@test.com' })));
+
   test('a partner can add, change and delete tasks, comment, and write in letters', async () => {
     await seedLetter();
-    await link();
+    await add('owner', 'stranger');
     const db = as('stranger');
     await assertSucceeds(addDoc(collection(db, 'lists', LIST, 'tasks'), task('stranger')));
     await assertSucceeds(updateDoc(doc(db, 'lists', LIST, 'tasks', 't1'), { done: true, ...stamp('stranger') }));
@@ -655,15 +654,15 @@ describe('partners', () => {
     await assertSucceeds(updateDoc(doc(db, 'lists', LETTER), { body: 'Dear you', updatedAt: serverTimestamp() }));
     await assertSucceeds(deleteDoc(doc(db, 'lists', LIST, 'tasks', 't1')));
   });
-  test('a partner cannot delete, rename or reshare the list', async () => {
-    await link();
+  test('a partner cannot delete, rename or archive the list', async () => {
+    await add('owner', 'stranger');
     const db = as('stranger');
     await assertFails(deleteDoc(doc(db, 'lists', LIST)));
     await assertFails(updateDoc(doc(db, 'lists', LIST), { title: 'Mine now', updatedAt: serverTimestamp() }));
     await assertFails(updateDoc(doc(db, 'lists', LIST), { archived: true, updatedAt: serverTimestamp() }));
   });
-  test('a partner sees the other\'s music and activity', async () => {
-    await link();
+  test('a partner sees the music and activity of whoever added them', async () => {
+    await add('owner', 'stranger');
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'users', 'owner'), { music: [] });
       await setDoc(doc(ctx.firestore(), 'users', 'owner', 'log', 'l1'), { kind: 'task-done', seen: false, createdAt: new Date() });
@@ -672,31 +671,30 @@ describe('partners', () => {
     await assertSucceeds(getDocs(collection(as('stranger'), 'users', 'owner', 'log')));
     await assertFails(updateDoc(doc(as('stranger'), 'users', 'owner', 'log', 'l1'), { seen: true }));
   });
-  test('it works both ways', async () => {
-    await link();
-    await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'lists', 'theirs'), {
-      title: 'Garden', ownerId: 'stranger', ownerEmail: 'stranger@test.com', ownerName: 'S',
-      roles: {}, memberEmails: [], createdAt: new Date(), updatedAt: new Date(),
-    }));
+  test('adding someone does not open their things to me, until they add me back', async () => {
+    await seedTheirs();
+    await add('owner', 'stranger');
+    await assertFails(getDoc(doc(as('owner'), 'lists', 'theirs')));
+    await assertSucceeds(add('stranger', 'owner'));
     await assertSucceeds(getDoc(doc(as('owner'), 'lists', 'theirs')));
   });
-  test('unlinking stops it straight away', async () => {
-    await link();
-    await assertSucceeds(deleteDoc(doc(as('stranger'), 'partners', 'stranger')));
+  test('removing a partner stops it straight away', async () => {
+    await add('owner', 'stranger');
+    await assertSucceeds(deleteDoc(doc(as('owner'), 'partners', 'owner')));
     await assertFails(ownersLists('stranger'));
-    await assertFails(getDoc(doc(as('owner'), 'users', 'stranger')));
   });
-  test('the person asked can decline', async () => {
-    await ask('owner', 'stranger');
+  test('the person added can stop seeing it', async () => {
+    await add('owner', 'stranger');
     await assertSucceeds(deleteDoc(doc(as('stranger'), 'partners', 'owner')));
+    await assertFails(ownersLists('stranger'));
   });
-  test('naming someone else breaks the link', async () => {
-    await link();
-    await assertSucceeds(ask('owner', 'reader'));
+  test('adding someone else takes it away from the first', async () => {
+    await add('owner', 'stranger');
+    await assertSucceeds(add('owner', 'reader'));
     await assertFails(ownersLists('stranger'));
   });
   test('the owner can tell their partner about a change', async () => {
-    await link();
+    await add('owner', 'stranger');
     await assertSucceeds(addDoc(collection(as('owner'), 'activity'), {
       to: 'stranger@test.com', listId: LIST, listTitle: 'Moving house', kind: 'task-done', text: 'A task', detail: '',
       fromName: 'Owner', fromEmail: 'owner@test.com', seen: false, createdAt: serverTimestamp(),

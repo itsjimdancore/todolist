@@ -118,15 +118,14 @@ service cloud.firestore {
       return hasEmail() && kindOf(list) == 'list'
         && exists(/databases/$(database)/documents/calendarShares/$(list.ownerId + '_' + myEmail()));
     }
-    // Partners: partners/{uid} says whose partner that person wants to be (one at a time). Two people are partners
-    // once each has named the other. Then each sees and changes everything the other owns: every list and letter,
-    // music and activity. Only the owner can still delete, rename, archive or share their own lists.
+    // Partners: partners/{uid} names that person's partner (one at a time). Like sharing a list, naming someone
+    // shares everything I own with them at once: every list and letter (to see and change), music and activity.
+    // Their things come to me when they name me back. Only the owner can still delete, rename, archive or share.
     function partnerRef(uid) { return /databases/$(database)/documents/partners/$(uid); }
+    // uid has named me as their partner
     function isPartner(uid) {
       return hasEmail() && uid != request.auth.uid
-        && exists(partnerRef(uid)) && exists(partnerRef(request.auth.uid))
-        && get(partnerRef(uid)).data.partnerEmail == myEmail()
-        && get(partnerRef(request.auth.uid)).data.partnerEmail == get(partnerRef(uid)).data.email;
+        && exists(partnerRef(uid)) && get(partnerRef(uid)).data.partnerEmail == myEmail();
     }
     // roleIn, or 'write' through a shared calendar, or 'partner' (edit and comment) on my partner's lists and letters
     function effRole(list) {
@@ -479,9 +478,9 @@ service cloud.firestore {
       allow delete: if hasEmail() && (resource.data.ownerUid == request.auth.uid || resource.data.to == myEmail());
     }
 
-    // ---------- partners/{uid}: who I want as my partner (one at a time). See isPartner. ----------
-    // Asking: I write mine naming them. They accept by writing theirs naming me; then everything is shared both ways.
-    // Either of us unlinks by deleting our own; the person I named can also decline (delete mine).
+    // ---------- partners/{uid}: my partner (one at a time). See isPartner. ----------
+    // Adding: I write mine naming them, and they see everything of mine at once. They share theirs by naming me back.
+    // I stop sharing by deleting mine; the person I named can also remove it (stop seeing mine).
     match /partners/{uid} {
       function validPartner(d) {
         return d.keys().hasOnly(['email', 'name', 'partnerEmail', 'createdAt'])

@@ -1,38 +1,34 @@
 'use client';
-// Partners: two people who share everything with each other — every list and letter (to see and change), music and
-// activity. partners/{uid} is who that person wants as their partner (one at a time); once each has named the other,
-// they're linked (firestore.rules: isPartner). Only the owner can still delete, rename, archive or share a list.
+// Partners, like sharing a list: adding someone as my partner shares everything I own with them at once — every
+// list and letter (to see and change), Unplaced tasks, music and activity. Their things come to me when they add me
+// back (one tap on their Partner page). partners/{uid} names that person's partner, one at a time
+// (firestore.rules: isPartner). Only the owner can still delete, rename, archive or share a list.
 import { useEffect, useMemo, useState } from 'react';
-import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, where, writeBatch } from 'firebase/firestore';
 import { fb } from './firebase';
 import { emailOf, nameOf, setPartnerForNotify } from './data';
+import { toDate } from './people';
 
 const db = () => fb().db;
 const ref = (uid) => doc(db(), 'partners', uid);
 
-// Name someone as my partner (asks them, or accepts their request). Replaces anyone I named before;
-// previous (the partner I'm linked with now) has theirs removed too, so they aren't left asking.
-export function askPartner(user, partnerEmail, previous = null) {
-  const b = writeBatch(db());
-  b.set(ref(user.uid), {
-    email: emailOf(user), name: nameOf(user).slice(0, 120), partnerEmail: partnerEmail.trim().toLowerCase(), createdAt: serverTimestamp(),
-  });
-  if (previous && previous.email !== partnerEmail) b.delete(ref(previous.uid));
-  return b.commit();
-}
-// Take back my request, or unlink: removes mine and (partner given) theirs too, so neither side is left asking
-export function unlinkPartner(user, partner = null) {
+// Add someone as my partner: they see everything of mine straight away. Replaces anyone I added before.
+export const addPartner = (user, partnerEmail) => setDoc(ref(user.uid), {
+  email: emailOf(user), name: nameOf(user).slice(0, 120), partnerEmail: partnerEmail.trim().toLowerCase(), createdAt: serverTimestamp(),
+});
+// Stop sharing mine; with: also stop seeing theirs (removes the one they wrote naming me), so it's off both ways
+export function removePartner(user, also = null) {
   const b = writeBatch(db());
   b.delete(ref(user.uid));
-  if (partner) b.delete(ref(partner.uid));
+  if (also) b.delete(ref(also.uid));
   return b.commit();
 }
-// Say no to someone's request (removes theirs)
-export const declinePartner = (uid) => deleteDoc(ref(uid));
+// Stop seeing someone's things (removes theirs naming me)
+export const stopSeeing = (uid) => deleteDoc(ref(uid));
 
-// mine: who I named ({ partnerEmail } or null). incoming: everyone who named me ([{ uid, email, name }]).
-// partner: linked ({ uid, email, name }) when one of them is the one I named. requests: the others.
-// outgoing: the email I named while they haven't named me back yet.
+// added: the email I share mine with (or null). sharers: everyone sharing theirs with me ([{ uid, email, name, at }]).
+// partner: whose things I see — the one I added, if they've added me too, else whoever added me most recently.
+// both: we've each added the other. others: anyone else sharing with me (shown so I can remove them).
 export function usePartner(user) {
   const email = emailOf(user);
   const [mine, setMine] = useState(undefined); // undefined = loading
@@ -40,22 +36,26 @@ export function usePartner(user) {
   useEffect(() => onSnapshot(ref(user.uid), (s) => setMine(s.exists() ? s.data() : null), () => setMine(null)), [user.uid]);
   useEffect(() => onSnapshot(
     query(collection(db(), 'partners'), where('partnerEmail', '==', email)),
-    (s) => setIncoming(s.docs.map((d) => ({ uid: d.id, email: d.data().email, name: d.data().name || '' }))),
+    (s) => setIncoming(s.docs
+      .map((d) => ({ uid: d.id, email: d.data().email, name: d.data().name || '', at: toDate(d.data({ serverTimestamps: 'estimate' }).createdAt) }))
+      .sort((a, b) => b.at - a.at)),
     () => setIncoming([]),
   ), [email]);
 
   const state = useMemo(() => {
-    const named = mine?.partnerEmail || null;
-    const partner = (named && incoming.find((p) => p.email === named)) || null;
+    const added = mine?.partnerEmail || null;
+    const partner = (added && incoming.find((p) => p.email === added)) || incoming[0] || null;
     return {
       loading: mine === undefined,
+      added,
+      addedName: mine?.partnerEmail === partner?.email ? partner?.name : '',
       partner,
-      outgoing: named && !partner ? named : null,
-      requests: incoming.filter((p) => p.email !== named),
+      both: !!partner && partner.email === added,
+      others: incoming.filter((p) => p !== partner),
     };
   }, [mine, incoming]);
 
-  // changes to my lists also go to my partner's notifications
-  useEffect(() => { setPartnerForNotify(state.partner?.email || null); }, [state.partner]);
+  // changes to my lists also go to the person I share with
+  useEffect(() => { setPartnerForNotify(state.added); }, [state.added]);
   return state;
 }

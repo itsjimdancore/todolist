@@ -21,6 +21,7 @@ const stopKey = (listId, t) => `stop:${listId}/${t.id}:${t.due}`;
 // Everything that's a notification, newest first:
 //  • share    — someone shared a list with me (stored in Firestore, read state syncs across devices)
 //  • mine     — what I did myself ("You created …", "You added a song …"), from my own log; counts as new too
+//  • partner-add — someone added me as their partner (lib/partner.js): read state kept like reminders'
 //  • partner  — what my partner did (their own log), in its own tab: never new, never in the bell, so a change
 //               they made to my list isn't shown twice
 //  • activity — someone else did something on a list or letter I'm on: a comment, a task added / done /
@@ -30,7 +31,7 @@ const stopKey = (listId, t) => `stop:${listId}/${t.id}:${t.due}`;
 // Reminders are worked out from the tasks; their read / cleared state is saved to my account, so every device agrees.
 // ---------------------------------------------------------------------------
 export function useNotifications({ invites, activity = [], log = [], me = null, user = null, lists, tasksByList, uid, openListId = null,
-  partnerLog = [], partner = null }) {
+  partnerLog = [], partner = null, partnerAdded = null }) {
   const toast = useToast();
   const [local, setLocal] = useState({ read: [], gone: [] });
   useEffect(() => watchReminderState(uid, (saved) => {
@@ -99,6 +100,15 @@ export function useNotifications({ invites, activity = [], log = [], me = null, 
       });
     }
 
+    // someone added me as their partner: everything of theirs is mine to see now
+    if (partnerAdded) {
+      const id = `partner-add:${partnerAdded.uid}:${partnerAdded.at.getTime()}`;
+      if (!gone.has(id)) {
+        out.push({ id, kind: 'partner-add', read: read.has(id), at: partnerAdded.at, partnerPage: true, both: partnerAdded.both,
+          from: { email: partnerAdded.email, displayName: partnerAdded.displayName } });
+      }
+    }
+
     for (const list of lists || []) {
       if (list.archived) continue;
       for (const t of tasksByList[list.id] || []) {
@@ -125,7 +135,7 @@ export function useNotifications({ invites, activity = [], log = [], me = null, 
       }
     }
     return out.sort((a, b) => b.at - a.at);
-  }, [invites, activity, log, me, lists, tasksByList, local, today]);
+  }, [invites, activity, log, me, lists, tasksByList, local, today, partnerAdded]);
 
   // my partner's activity, read-only (it's theirs to mark or remove)
   const partnerItems = useMemo(() => {
@@ -247,6 +257,7 @@ export function useNotifications({ invites, activity = [], log = [], me = null, 
 // ---------------------------------------------------------------------------
 const KIND = {
   share: { label: 'Shared with you', cta: 'Open list' },
+  'partner-add': { label: 'Partner', cta: 'Open Partner' },
   due: { label: 'Due today', cta: 'Open task' },
   overdue: { label: 'Overdue', cta: 'Open task' },
 };
@@ -258,6 +269,9 @@ const ctaOf = (n) =>
   n.music ? 'Open music' : n.gone ? null : isComment(n) ? 'Open comments' : ACT[n.kind] || n.kind === 'share' ? (n.letter ? 'Open letter' : 'Open list') : KIND[n.kind].cta;
 
 function Headline({ n }) {
+  if (n.kind === 'partner-add') {
+    return <><b>{n.from.displayName || n.from.email}</b> added you as their partner. You can see and change all their lists, letters and music{n.both ? '' : '. Add them back to share yours'}</>;
+  }
   if (n.kind === 'share') {
     if (n.letter) return <><b>{n.from.displayName || n.from.email}</b> sent you a love letter, <b>“{n.listTitle}”</b></>;
     return <><b>{n.from.displayName || n.from.email}</b> shared <b>“{n.listTitle}”</b> with you</>;
@@ -274,12 +288,12 @@ function Headline({ n }) {
 }
 
 function KindIcon({ n, size = 36 }) {
-  if (n.kind === 'share' || ACT[n.kind]) {
+  if (n.kind === 'share' || n.kind === 'partner-add' || ACT[n.kind]) {
     return (
       <span className={`nt-ic k-${n.kind === 'share' ? 'share' : isComment(n) ? 'comment' : n.music ? 'music' : 'update'}`} style={{ width: size, height: size }}>
         <Avatar person={n.from} size={size} />
         <span className="nt-ic-mini" aria-hidden="true">
-          {n.kind === 'share' ? (
+          {n.kind === 'share' || n.kind === 'partner-add' ? (
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13" /></svg>
           ) : isComment(n) ? (
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z" /></svg>
@@ -465,7 +479,7 @@ export default function Notifications({ api, user, onOpen, onViewAll }) {
     };
   }, [open]);
 
-  const go = (n) => { api.setRead(n, true); if (n.music) onOpen(null); else if (!n.gone) onOpen(n.listId, { comments: isComment(n) }); setOpen(false); };
+  const go = (n) => { api.setRead(n, true); if (n.partnerPage) onOpen(null, { partner: true }); else if (n.music) onOpen(null); else if (!n.gone) onOpen(n.listId, { comments: isComment(n) }); setOpen(false); };
 
   return (
     <div className="notif" ref={box}>
@@ -560,7 +574,7 @@ function Empty({ unreadOnly, filtered, compact }) {
 const FILTERS = {
   all: { label: 'All', test: () => true },
   unread: { label: 'Unread', test: (n) => !n.read },
-  share: { label: 'Shared with you', test: (n) => n.kind === 'share' },
+  share: { label: 'Shared with you', test: (n) => n.kind === 'share' || n.kind === 'partner-add' },
   updates: { label: 'Updates', test: isUpdate },
   comments: { label: 'Comments', test: isComment },
   reminders: { label: 'Reminders', test: (n) => REMINDER.has(n.kind) },
@@ -588,7 +602,7 @@ export function NotificationsPage({ api, user, onOpen }) {
     { label: 'Due today', value: items.filter((n) => n.kind === 'due').length, tone: 'warn' },
     { label: 'Overdue', value: items.filter((n) => n.kind === 'overdue').length, tone: 'danger' },
   ];
-  const go = (n) => { api.setRead(n, true); if (n.music) onOpen(null); else if (!n.gone) onOpen(n.listId, { comments: isComment(n) }); };
+  const go = (n) => { api.setRead(n, true); if (n.partnerPage) onOpen(null, { partner: true }); else if (n.music) onOpen(null); else if (!n.gone) onOpen(n.listId, { comments: isComment(n) }); };
 
   return (
     <div className="ntp">
@@ -676,6 +690,9 @@ export function NotificationsPage({ api, user, onOpen }) {
 
 // The detail line under a notification on the page
 function Details({ n }) {
+  if (n.kind === 'partner-add') {
+    return <div className="ntp-d"><span className="ntp-d-extra">from {n.from.email}</span><span className="ntp-d-extra">{fullTime(n.at)}</span></div>;
+  }
   const list = n.listId ? (
     <span className="ntp-list-chip"><i style={{ background: colorFor(n.listId) }} />{n.listTitle}</span>
   ) : null;
