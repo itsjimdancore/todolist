@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import {
   FieldPath, addDoc, arrayRemove, arrayUnion, collection, deleteDoc, deleteField, doc, getDoc, getDocs,
-  query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
+  Timestamp, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
 } from 'firebase/firestore';
 
 let env;
@@ -182,6 +182,10 @@ describe('tasks', () => {
     assertSucceeds(updateDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1'), { location: 'Karura Forest', ...stamp('rw') })));
   test('location must be text of at most 200 characters', () =>
     assertFails(addDoc(collection(as('writer'), 'lists', LIST, 'tasks'), task('writer', { location: 'x'.repeat(201) }))));
+  test('can set the steps of what is going to be done', () =>
+    assertSucceeds(updateDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1'), { steps: [{ text: 'E bike riding', location: 'Tigoni', url: '' }], ...stamp('rw') })));
+  test('at most 20 steps', () =>
+    assertFails(addDoc(collection(as('writer'), 'lists', LIST, 'tasks'), task('writer', { steps: Array.from({ length: 21 }, () => ({ text: 'x', location: '', url: '' })) }))));
   test('reader cannot set a location', () =>
     assertFails(updateDoc(doc(as('reader'), 'lists', LIST, 'tasks', 't1'), { location: 'Somewhere', ...stamp('reader') })));
   test('can add links to a task', () =>
@@ -564,5 +568,34 @@ describe('my own activity log', () => {
   test('only "seen" can change afterwards', async () => {
     const ref = await addDoc(logOf('reader'), entry());
     await assertFails(updateDoc(ref, { text: 'changed' }));
+  });
+});
+
+describe('chat messages', () => {
+  const CHAT = 'chat1';
+  const msg = (id) => doc(as('writer'), 'chats', CHAT, 'messages', id);
+  const seed = (id, hoursAgo, from = 'writer') => env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'chats', CHAT), { members: [people.writer.email, people.reader.email] });
+    await setDoc(doc(db, 'chats', CHAT, 'messages', id),
+      { from: people[from].email, text: 'hi', createdAt: Timestamp.fromMillis(Date.now() - hoursAgo * 3600000) });
+  });
+  const edit = (ref) => updateDoc(ref, { text: 'fixed', editedAt: serverTimestamp() });
+
+  test('can edit my message within 3 hours, even once it has been read', async () => {
+    await seed('m1', 2.5);
+    await assertSucceeds(edit(msg('m1')));
+  });
+  test('cannot edit my message after 3 hours', async () => {
+    await seed('m2', 3.1);
+    await assertFails(edit(msg('m2')));
+  });
+  test('can still delete my message for everyone after 3 hours', async () => {
+    await seed('m3', 5);
+    await assertSucceeds(updateDoc(msg('m3'), { text: '', deleted: true }));
+  });
+  test('cannot edit their message', async () => {
+    await seed('m4', 0, 'reader');
+    await assertFails(edit(msg('m4')));
   });
 });

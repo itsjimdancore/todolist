@@ -507,7 +507,7 @@ function taskKind(task, patch) {
   if ('archived' in patch) return patch.archived ? 'task-archive' : 'task-restore';
   if ('text' in patch) return 'task-edit';
   if ('due' in patch || 'start' in patch) return 'task-due';
-  if ('notes' in patch || 'location' in patch) return 'task-notes'; // what's going to be done, and where
+  if ('notes' in patch || 'location' in patch || 'steps' in patch) return 'task-notes'; // what's going to be done, and where
   return null;
 }
 

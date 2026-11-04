@@ -4,13 +4,15 @@ import { DEFAULT_MINS, fromMin, isOverdue, timeRange, toMin } from '@/lib/dates'
 import { colorFor } from '@/lib/people';
 import DuePicker from './DuePicker';
 import Select from './Select';
-import TaskLinks from './TaskLinks';
+import TaskLinks, { LinkIcon } from './TaskLinks';
+import { normalizeUrl } from '@/lib/links';
+import { MAX_STEPS, MAX_STEP_TEXT, emptyStep, sameSteps, stepsOf } from '@/lib/steps';
 
 export const MAX_LOCATION = 200;
 
 // Everything about one task: title, what's going to be done, where, links, date and time, status, who added it,
 // and (with write access) Archive and Delete. Used by the Calendar's side panel and the popup in a list.
-// on: handlers already bound to this task: toggle, text, notes, location, due, schedule, addLink, removeLink, archive, remove
+// on: handlers already bound to this task: toggle, text, steps, due, schedule, removeLink, archive, remove
 export default function TaskDetails({ task: t, list: l, write, on, onClose, footer = null }) {
   const canEdit = write && !t.archived;
   return (
@@ -23,9 +25,9 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
         <input type="checkbox" checked={t.done} disabled={!write} onChange={on.toggle} aria-label="Done" />
         <TitleField key={t.id} value={t.text} canEdit={canEdit} onSave={on.text} />
       </div>
-      <NotesField key={`n-${t.id}`} value={t.notes || ''} canEdit={canEdit} onSave={on.notes} />
-      <LocationField key={`l-${t.id}`} value={t.location || ''} canEdit={canEdit} onSave={on.location} />
-      <PanelLinks key={`links-${t.id}`} links={t.links} canEdit={canEdit} onAdd={on.addLink} onRemove={on.removeLink} />
+      <StepsField key={`s-${t.id}`} value={stepsOf(t)} canEdit={canEdit} onSave={on.steps} />
+      {/* links added before steps had their own: still shown (and removable), but no longer added here */}
+      <TaskLinks links={t.links} canEdit={canEdit} onRemove={on.removeLink} />
       <dl className="cal-panel-d">
         <dt>Date</dt>
         <dd><DuePicker value={t.due || null} task={t} canEdit={canEdit} onChange={on.due} /></dd>
@@ -87,20 +89,6 @@ function TitleField({ value, canEdit, onSave }) {
   );
 }
 
-// "What's going to be done": saved when you click away
-function NotesField({ value, canEdit, onSave }) {
-  const [text, setText] = useState(value);
-  useEffect(() => setText(value), [value]);
-  if (!canEdit) return value ? <p className="cal-notes-read">{value}</p> : null;
-  return (
-    <label className="field cal-notes">
-      <span>What&apos;s going to be done</span>
-      <textarea rows={3} maxLength={2000} value={text} onChange={(e) => setText(e.target.value)}
-        onBlur={() => text.trim() !== value && onSave(text.trim())} placeholder="Details, steps, links…" />
-    </label>
-  );
-}
-
 const mapsUrl = (place) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
 
 export function PinIcon() {
@@ -111,34 +99,107 @@ export function PinIcon() {
   );
 }
 
-// Where it happens: saved when you click away, with a link to see it on a map
-function LocationField({ value, canEdit, onSave }) {
-  const [text, setText] = useState(value);
-  useEffect(() => setText(value), [value]);
-  const maps = value && (
-    <a className="td-maps" href={mapsUrl(value)} target="_blank" rel="noopener noreferrer">Open in Maps ↗</a>
-  );
-  if (!canEdit) {
-    return value ? <p className="td-loc-read"><PinIcon /><span>{value}</span>{maps}</p> : null;
-  }
-  return (
-    <label className="field td-loc">
-      <span className="field-top"><span>Location</span>{maps}</span>
-      <span className="td-loc-in">
-        <PinIcon />
-        <input maxLength={MAX_LOCATION} value={text} onChange={(e) => setText(e.target.value)} autoComplete="off"
-          onBlur={() => text.trim() !== value && onSave(text.trim())}
-          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-          placeholder="Where is it? e.g. Westlands, Nairobi" />
-      </span>
-    </label>
-  );
-}
+const MapsLink = ({ place }) => (place
+  ? <a className="td-maps" href={mapsUrl(place)} target="_blank" rel="noopener noreferrer">Open in Maps ↗</a>
+  : null);
 
-// Links on the task; the add form closes when another task opens (keyed by task)
-function PanelLinks({ links, canEdit, onAdd, onRemove }) {
-  const [adding, setAdding] = useState(false);
-  return <TaskLinks links={links} canEdit={canEdit} adding={adding} setAdding={setAdding} addButton onAdd={onAdd} onRemove={onRemove} />;
+let stepSeq = 0;
+const withKeys = (steps) => (steps.length ? steps : [emptyStep()]).map((s) => ({ ...s, key: ++stepSeq }));
+
+// "What's going to be done", step by step. Each step: what (a line), where (a line), Open in Maps above them on
+// the right, and a link if wanted. + adds another step. Saved when you click away from a field.
+function StepsField({ value, canEdit, onSave }) {
+  const [steps, setSteps] = useState(() => withKeys(value));
+  const [badUrl, setBadUrl] = useState(null); // key of the step whose link isn't a web address
+  const saved = JSON.stringify(value);
+  // changed elsewhere: show that (unless it matches what's here, so a new step still being typed stays)
+  useEffect(() => { setSteps((cur) => (sameSteps(cur, value) ? cur : withKeys(value))); }, [saved]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!canEdit) {
+    if (!value.length) return null;
+    return (
+      <div className="steps">
+        <span className="steps-h">What&apos;s going to be done</span>
+        <ol className="steps-read">
+          {value.map((s, i) => (
+            <li key={i}>
+              {s.text && <p>{s.text}</p>}
+              {s.location && <p className="step-r-loc"><PinIcon /><span>{s.location}</span><MapsLink place={s.location} /></p>}
+              {s.url && <a className="step-r-link" href={s.url} target="_blank" rel="noopener noreferrer"><LinkIcon /><span>{s.url}</span></a>}
+            </li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
+
+  function save(next = steps) {
+    const bad = next.find((s) => s.url.trim() && !normalizeUrl(s.url));
+    if (bad) return setBadUrl(bad.key);
+    setBadUrl(null);
+    const fixed = next.map((s) => (s.url.trim() ? { ...s, url: normalizeUrl(s.url) } : s));
+    if (fixed.some((s, i) => s.url !== next[i].url)) setSteps(fixed);
+    if (!sameSteps(fixed, value)) onSave(fixed);
+  }
+  const set = (key, field) => (e) => {
+    const v = e.target.value;
+    setSteps((cur) => cur.map((s) => (s.key === key ? { ...s, [field]: v } : s)));
+    if (field === 'url' && badUrl === key) setBadUrl(null);
+  };
+  const openLink = (key) => setSteps((cur) => cur.map((s) => (s.key === key ? { ...s, linkOpen: true } : s)));
+  const remove = (key) => {
+    const rest = steps.filter((s) => s.key !== key);
+    const next = rest.length ? rest : withKeys([]);
+    setSteps(next);
+    save(next);
+  };
+  const enterBlurs = (e) => e.key === 'Enter' && e.currentTarget.blur();
+
+  return (
+    <div className="steps">
+      <span className="steps-h">What&apos;s going to be done</span>
+      {steps.map((s, i) => (
+        <div className="step" key={s.key}>
+          <div className="step-top">
+            <span className="step-n">{steps.length > 1 ? `Step ${i + 1}` : ''}</span>
+            <MapsLink place={s.location.trim()} />
+            {(steps.length > 1 || s.text || s.location || s.url) && (
+              <button type="button" className="ic step-x" onClick={() => remove(s.key)} aria-label={`Remove step ${i + 1}`}>✕</button>
+            )}
+          </div>
+          <input type="text" className="line-in" maxLength={MAX_STEP_TEXT} value={s.text} onChange={set(s.key, 'text')}
+            onBlur={() => save()} onKeyDown={enterBlurs} autoComplete="off" autoFocus={!!s.fresh}
+            placeholder={i ? 'What happens next?' : "What's going to be done?"} aria-label={`Step ${i + 1}: what's going to be done`} />
+          <span className="line-row">
+            <PinIcon />
+            <input type="text" className="line-in" maxLength={MAX_LOCATION} value={s.location} onChange={set(s.key, 'location')}
+              onBlur={() => save()} onKeyDown={enterBlurs} autoComplete="off"
+              placeholder="Location, e.g. Westlands, Nairobi" aria-label={`Step ${i + 1}: location`} />
+          </span>
+          {s.url || s.linkOpen ? (
+            <span className="line-row">
+              <LinkIcon />
+              {/* not type="url": the browser would refuse a bare "example.com" */}
+              <input type="text" className="line-in" inputMode="url" autoCapitalize="none" spellCheck={false} maxLength={2000}
+                value={s.url} onChange={set(s.key, 'url')} onBlur={() => save()} onKeyDown={enterBlurs} autoComplete="off"
+                autoFocus={!!s.linkOpen && !s.url} placeholder="Link (optional)" aria-label={`Step ${i + 1}: link`} />
+              {normalizeUrl(s.url) && <a className="td-maps" href={normalizeUrl(s.url)} target="_blank" rel="noopener noreferrer">Open ↗</a>}
+            </span>
+          ) : (
+            <button type="button" className="ic step-link-add" onClick={() => openLink(s.key)}>
+              + Link <span className="opt">optional</span>
+            </button>
+          )}
+          {badUrl === s.key && <p className="link-err" role="alert">Enter a web address, like example.com</p>}
+        </div>
+      ))}
+      {steps.length < MAX_STEPS && (
+        <button type="button" className="step-add" onClick={() => setSteps((cur) => [...cur, { ...emptyStep(), key: ++stepSeq, fresh: true }])}>
+          <span aria-hidden="true">+</span> Add another
+        </button>
+      )}
+    </div>
+  );
 }
 
 // Archive / Restore and Delete (asks once more before deleting)

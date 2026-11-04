@@ -14,6 +14,7 @@ import { PERMISSIONS, canComment, canWrite, roleLabel } from '@/lib/permissions'
 import PeopleStack from './PeopleStack';
 import BackLink from './BackLink';
 import { byDue, dueLabel } from '@/lib/dates';
+import { stepsPatch } from '@/lib/steps';
 import { useToast } from './Toast';
 import AddTask from './AddTask';
 import TaskItem from './TaskItem';
@@ -124,6 +125,7 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
       notes: (notes) => (t.notes || '') !== notes && run(updateTask(list, t, user, { notes }), 'Notes saved'),
       location: (location) => (t.location || '') !== location &&
         run(updateTask(list, t, user, { location }), location ? 'Location saved' : 'Location removed'),
+      steps: (steps) => run(updateTask(list, t, user, stepsPatch(steps)), 'Saved'),
       due: p.onDue,
       schedule: (due, start, mins) => {
         const patch = { due, start: start || null, mins: start ? mins : null };

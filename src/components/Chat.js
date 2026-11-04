@@ -11,7 +11,7 @@ import EmojiPicker from './EmojiPicker';
 import Loading, { Spinner } from './Loading';
 import { useToast } from './Toast';
 
-const EDIT_MINS = 15; // your own messages can be edited for this long
+const EDIT_MINS = 180; // your own messages can be edited for 3 hours, read (blue ✓✓) or not; firestore.rules agrees
 const TYPING_MS = 6000; // "typing…" shows while their last keystroke is this recent
 const GROUP_MS = 5 * 60 * 1000; // messages this close together from one person form a group (one tail)
 
@@ -549,6 +549,7 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
     setEmoji(false);
     try {
       if (editing) {
+        if (Date.now() - ms(editing.createdAt) >= EDIT_MINS * 60000) { setEditing(null); setText(''); return toast("This message can't be edited any more. Messages can be edited for 3 hours.", 'err'); }
         if (v !== editing.text) await editMessage(chatId, editing.id, v);
         setEditing(null);
       } else {

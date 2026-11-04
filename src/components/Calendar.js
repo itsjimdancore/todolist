@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { addTask, addTaskLink, createList, deleteTask, isUnplaced, removeTaskLink, updateTask, watchTasks } from '@/lib/data';
+import { stepsPatch } from '@/lib/steps';
 import {
   DEFAULT_MINS, addDays, dueLabel, fromKey, fromMin, hourLabel, isOverdue, longDay, monthDays,
   monthTitle, snap, time12, timeRange, toKey, toMin, todayKey, weekday,
@@ -149,6 +150,7 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
     },
     notes: ({ t, l }, notes) => (t.notes || '') !== notes && run(updateTask(l, t, user, { notes }), 'Notes saved'),
     location: ({ t, l }, location) => (t.location || '') !== location && run(updateTask(l, t, user, { location }), location ? 'Location saved' : 'Location removed'),
+    steps: ({ t, l }, steps) => run(updateTask(l, t, user, stepsPatch(steps)), 'Saved'),
     text: ({ t, l }, text) => text !== t.text && run(updateTask(l, t, user, { text }), 'Task renamed'),
     archive: ({ t, l }) => run(updateTask(l, t, user, { archived: !t.archived }), t.archived ? 'Task restored' : 'Task archived'),
     remove: ({ t, l }) => run(deleteTask(l, t, user), 'Task deleted'),
@@ -1059,6 +1061,7 @@ function TaskPanel({ entry, actions, onClose }) {
     text: (text) => actions.text(entry, text),
     notes: (notes) => actions.notes(entry, notes),
     location: (location) => actions.location(entry, location),
+    steps: (steps) => actions.steps(entry, steps),
     due: (due) => actions.due(entry, due),
     schedule: (due, start, mins) => actions.schedule(entry, due, start, mins),
     addLink: (link) => actions.addLink(entry, link),

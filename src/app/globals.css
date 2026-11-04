@@ -1617,6 +1617,36 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .td-maps:hover { text-decoration: underline; }
 .td-loc-read { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--sunk); font-size: 14px; }
 .td-loc-read svg { flex: none; color: var(--muted); }
+
+/* "What's going to be done", step by step: each step a line for what and a line for where (only a bottom border),
+   Open in Maps above them on the right, an optional link, and + to add another step */
+.steps { display: flex; flex-direction: column; gap: 12px; }
+.steps-h { font-size: 13px; color: var(--muted); }
+.step { display: flex; flex-direction: column; gap: 6px; }
+.step + .step { padding-top: 12px; border-top: 1px dashed var(--line); }
+.step-top { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.step-n { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
+.step-x { padding: 2px 6px; }
+.steps input.line-in:not([type=checkbox]):not([type=radio]) { width: 100%; padding: 6px 2px; border: none; border-bottom: 1px solid var(--line);
+  border-radius: 0; background: transparent; font-size: 14.5px; color: var(--fg); }
+.steps input.line-in:not([type=checkbox]):not([type=radio]):focus { outline: none; border-bottom-color: var(--accent); }
+.line-row { display: flex; align-items: center; gap: 8px; }
+.line-row > svg { flex: none; color: var(--muted); }
+.line-row:focus-within > svg { color: var(--accent); }
+.step-link-add { align-self: flex-start; padding: 2px 0; color: var(--accent); font-weight: 500; }
+.step-link-add .opt { font-weight: 400; color: var(--muted); margin-left: 2px; }
+.step-add { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px dashed var(--line);
+  border-radius: 8px; background: transparent; color: var(--accent); font-size: 13px; font-weight: 500; }
+.step-add span { font-size: 16px; line-height: 1; }
+.step-add:hover { background: var(--sunk); }
+.steps-read { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 10px 12px 10px 30px; border-radius: 10px; background: var(--sunk); font-size: 14px; }
+.steps-read li p { margin: 0; overflow-wrap: anywhere; }
+.step-r-loc, .step-r-link { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin-top: 2px; color: var(--muted); font-size: 13px; }
+.step-r-loc svg, .step-r-link svg { flex: none; }
+.step-r-link { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .steps input.line-in:not([type=checkbox]):not([type=radio]) { font-size: 16px; padding: 9px 2px; } /* no zoom-in on iPhone, bigger to tap */
+}
 .td-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
 .td-acts .btn { height: 40px; }
 .td-del { color: var(--danger); border-color: rgb(242 134 122 / .35); }
