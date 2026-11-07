@@ -131,6 +131,7 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
       steps: (steps) => run(updateTask(list, t, user, stepsPatch(steps)), 'Saved'),
       due: p.onDue,
       month: p.onMonth,
+      rating: (rating) => run(updateTask(list, t, user, { rating }), rating ? `Rated ${rating}/10` : 'Rating removed'),
       schedule: (due, start, mins) => {
         const patch = { due, start: start || null, mins: start ? mins : null };
         if ((t.start || null) === patch.start && (t.mins || null) === patch.mins) return;

@@ -45,6 +45,7 @@ export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, on
           // links sit on the same line as the task, wrapping after it when there's no room
           <span className="t-line">
             <button type="button" className="t-open" onClick={onOpen} title="Open the task's details">{task.text}</button>
+            {task.rating > 0 && <span className="t-rate" title="Overall experience">★ {task.rating}/10</span>}
             <LinkChips links={task.links} canEdit={write && !task.archived} onRemove={onRemoveLink} />
           </span>
         )}

@@ -189,6 +189,10 @@ describe('tasks', () => {
     assertSucceeds(updateDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1'), { steps: [{ text: 'Coffee', location: 'Kaffe Brix', url: '', due: '2026-12-05', done: true, rating: 8 }], ...stamp('rw') })));
   test('a task can happen during a month (and not on a day)', () =>
     assertSucceeds(updateDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1'), { month: '2026-12', due: null, start: null, mins: null, ...stamp('rw') })));
+  test('a task can be rated overall out of 10', () =>
+    assertSucceeds(updateDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1'), { rating: 9, ...stamp('rw') })));
+  test('the overall rating is at most 10', () =>
+    assertFails(updateDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1'), { rating: 11, ...stamp('rw') })));
   test('the month must be YYYY-MM', () =>
     assertFails(updateDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1'), { month: '2026-13', ...stamp('rw') })));
   test('at most 20 steps', () =>

@@ -6,7 +6,7 @@ import DuePicker from './DuePicker';
 import Select from './Select';
 import TaskLinks, { LinkIcon } from './TaskLinks';
 import { normalizeUrl } from '@/lib/links';
-import { MAX_RATING, MAX_STEPS, MAX_STEP_TEXT, emptyStep, ratingWord, sameSteps, stepsOf } from '@/lib/steps';
+import { MAX_RATING, MAX_STEPS, MAX_STEP_TEXT, clampRating, emptyStep, ratingWord, sameSteps, stepsOf } from '@/lib/steps';
 
 export const MAX_LOCATION = 200;
 
@@ -25,6 +25,7 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
         <input type="checkbox" checked={t.done} disabled={!write} onChange={on.toggle} aria-label="Done" />
         <TitleField key={t.id} value={t.text} canEdit={canEdit} onSave={on.text} />
       </div>
+      <OverallRating key={`r-${t.id}`} task={t} canEdit={canEdit} onSave={on.rating} />
       <StepsField key={`s-${t.id}`} value={stepsOf(t)} canEdit={canEdit} onSave={on.steps} />
       {/* links added before steps had their own: still shown (and removable), but no longer added here */}
       <TaskLinks links={t.links} canEdit={canEdit} onRemove={on.removeLink} />
@@ -223,17 +224,8 @@ function StepsField({ value, canEdit, onSave }) {
           )}
           {/* once it's ticked off: how was it? Saved when you let go of the slider */}
           {s.done && (
-            <div className="step-rate">
-              <span className="step-rate-top">
-                <span>Rate the experience</span>
-                <span className={s.rating ? 'rate-val on' : 'rate-val'}>{ratingWord(s.rating)}{s.rating ? ` · ${s.rating}/${MAX_RATING}` : ''}</span>
-              </span>
-              <input type="range" className="rate-in" min={0} max={MAX_RATING} step={1} value={s.rating}
-                style={{ '--fill': `${(s.rating / MAX_RATING) * 100}%` }} onChange={set(s.key, 'rating')}
-                onPointerUp={() => save()} onKeyUp={() => save()} onBlur={() => save()}
-                aria-label={`Step ${i + 1}: rate the experience`} aria-valuetext={`${ratingWord(s.rating)}, ${s.rating} out of ${MAX_RATING}`} />
-              <span className="rate-ticks" aria-hidden="true"><span>0</span><span>5</span><span>10</span></span>
-            </div>
+            <RatingSlider value={s.rating} onChange={set(s.key, 'rating')} onCommit={() => save()}
+              ariaLabel={`Step ${i + 1}: rate the experience`} />
           )}
           {s.url || s.linkOpen ? (
             <span className="line-row">
@@ -257,6 +249,53 @@ function StepsField({ value, canEdit, onSave }) {
           <span aria-hidden="true">+</span> Add another
         </button>
       )}
+    </div>
+  );
+}
+
+// A 0-10 slider to rate an experience (0 = not rated yet). onChange gets the input's change event as it moves;
+// onCommit runs when it's let go of (pointer, key or focus leaving), which is when it's saved.
+function RatingSlider({ value, onChange, onCommit, ariaLabel, title = 'Rate the experience', hint = null }) {
+  return (
+    <div className="step-rate">
+      <span className="step-rate-top">
+        <span>{title}{hint && <span className="rate-hint"> · {hint}</span>}</span>
+        <span className={value ? 'rate-val on' : 'rate-val'}>{ratingWord(value)}{value ? ` · ${value}/${MAX_RATING}` : ''}</span>
+      </span>
+      <input type="range" className="rate-in" min={0} max={MAX_RATING} step={1} value={value}
+        style={{ '--fill': `${(value / MAX_RATING) * 100}%` }} onChange={onChange}
+        onPointerUp={onCommit} onKeyUp={onCommit} onBlur={onCommit}
+        aria-label={ariaLabel} aria-valuetext={`${ratingWord(value)}, ${value} out of ${MAX_RATING}`} />
+      <span className="rate-ticks" aria-hidden="true"><span>0</span><span>5</span><span>10</span></span>
+    </div>
+  );
+}
+
+// The whole thing, rated overall (e.g. the date as a whole, after its steps). Shows once the task or any of its
+// steps is ticked off, along with the average of the steps' own ratings as a guide. Saved when let go of.
+function OverallRating({ task: t, canEdit, onSave }) {
+  const saved = clampRating(t.rating);
+  const [value, setValue] = useState(saved);
+  useEffect(() => setValue(saved), [saved]);
+  const steps = stepsOf(t);
+  const rated = steps.filter((s) => s.done && s.rating > 0);
+  const avg = rated.length ? Math.round((rated.reduce((n, s) => n + s.rating, 0) / rated.length) * 10) / 10 : 0;
+  const hint = rated.length > 1 ? `steps average ${avg}` : null;
+
+  if (!canEdit) {
+    if (!saved) return null;
+    return (
+      <p className="overall-read">
+        <span className="rate-bar" aria-hidden="true"><span style={{ width: `${(saved / MAX_RATING) * 100}%` }} /></span>
+        Overall: {ratingWord(saved)} · {saved}/{MAX_RATING}
+      </p>
+    );
+  }
+  if (!t.done && !saved && !steps.some((s) => s.done)) return null;
+  return (
+    <div className="overall-rate">
+      <RatingSlider value={value} title="Overall experience" hint={hint} ariaLabel="Rate the experience overall"
+        onChange={(e) => setValue(Number(e.target.value))} onCommit={() => value !== saved && onSave(value)} />
     </div>
   );
 }

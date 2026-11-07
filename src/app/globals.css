@@ -1658,6 +1658,13 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .step-n { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
 .step-x { padding: 2px 6px; }
 .step-gap { flex: 1; }
+/* the whole thing rated overall, under its title */
+.overall-rate { padding: 10px 12px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--sunk); }
+.overall-rate .step-rate { padding-top: 0; }
+.overall-rate .step-rate-top > span:first-child { color: var(--fg); font-weight: 600; font-size: 13px; }
+.rate-hint { color: var(--muted); font-weight: 400; }
+.overall-read { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--sunk); font-size: 13.5px; }
+.t-rate { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; }
 /* tick a step off once it's written; a done step's text is struck through and the rating slider shows */
 .step-tick { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
 .step-tick input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); cursor: pointer; }
