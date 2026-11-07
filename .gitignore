@@ -11,3 +11,5 @@ npm-debug.log*
 # Firebase service-account keys (secret: they go in FIREBASE_SERVICE_ACCOUNT, never in git)
 *firebase-adminsdk*.json
 service-account*.json
+
+firestore-debug.log
