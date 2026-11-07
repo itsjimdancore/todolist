@@ -5,7 +5,7 @@ import DuePicker from './DuePicker';
 import { AddLink, LinkChips } from './TaskLinks';
 import { StepLines } from './TaskDetails';
 
-export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, onDue, onArchive, onDelete, onAddLink, onRemoveLink }) {
+export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, onDue, onMonth, onArchive, onDelete, onAddLink, onRemoveLink }) {
   const [editing, setEditing] = useState(false);
   const [linking, setLinking] = useState(false); // the "add a link" form under the task
   const [text, setText] = useState(task.text);
@@ -53,7 +53,8 @@ export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, on
           <div className="task-links"><AddLink links={task.links} onAdd={onAddLink} setAdding={setLinking} /></div>
         )}
       </div>
-      <DuePicker value={task.due || null} task={task} canEdit={write && !task.archived} onChange={onDue} time={task.start || null} />
+      <DuePicker value={task.due || null} month={task.month || null} task={task} canEdit={write && !task.archived}
+        onChange={onDue} onMonth={onMonth} time={task.start || null} />
       <span className="by" title={`Updated ${timeAgo(task.updatedAt)}${edited}`}>{by}</span>
       {write && (
         <TaskMenu task={task} onEdit={startEdit} onOpen={onOpen} onLink={() => setLinking(true)} onArchive={onArchive} onDelete={onDelete} />

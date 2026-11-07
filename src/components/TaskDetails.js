@@ -1,12 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { DEFAULT_MINS, fromMin, isOverdue, timeRange, toMin } from '@/lib/dates';
+import { DEFAULT_MINS, dueLabel, fromMin, isOverdue, timeRange, toMin, todayKey } from '@/lib/dates';
 import { colorFor } from '@/lib/people';
 import DuePicker from './DuePicker';
 import Select from './Select';
 import TaskLinks, { LinkIcon } from './TaskLinks';
 import { normalizeUrl } from '@/lib/links';
-import { MAX_STEPS, MAX_STEP_TEXT, emptyStep, sameSteps, stepsOf } from '@/lib/steps';
+import { MAX_RATING, MAX_STEPS, MAX_STEP_TEXT, emptyStep, ratingWord, sameSteps, stepsOf } from '@/lib/steps';
 
 export const MAX_LOCATION = 200;
 
@@ -30,7 +30,8 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
       <TaskLinks links={t.links} canEdit={canEdit} onRemove={on.removeLink} />
       <dl className="cal-panel-d">
         <dt>Date</dt>
-        <dd><DuePicker value={t.due || null} task={t} canEdit={canEdit} onChange={on.due} /></dd>
+        {/* on a day (then a time below), or sometime during a month (no time; its steps can have their own dates) */}
+        <dd><DuePicker value={t.due || null} month={t.month || null} task={t} canEdit={canEdit} onChange={on.due} onMonth={on.month} /></dd>
         {t.due && (
           <>
             <dt>Time</dt>
@@ -106,9 +107,12 @@ export function StepLines({ task }) {
   return (
     <ul className="step-lines">
       {steps.map((s, i) => (
-        <li key={i}>
+        <li key={i} className={s.done ? 'sl-done' : ''}>
+          {s.done && <span className="sl-tick" aria-label="Done">✓</span>}
           {s.text && <span className="sl-t">{s.text}</span>}
           {s.location && <span className="sl-loc"><PinIcon /><span>{s.location}</span></span>}
+          {s.due && <span className={!s.done && s.due < todayKey() ? 'sl-due late-txt' : 'sl-due'}>{dueLabel(s.due)}</span>}
+          {s.done && s.rating > 0 && <span className="sl-rate">★ {s.rating}/{MAX_RATING}</span>}
         </li>
       ))}
     </ul>
@@ -138,9 +142,14 @@ function StepsField({ value, canEdit, onSave }) {
         <span className="steps-h">What&apos;s going to be done</span>
         <ol className="steps-read">
           {value.map((s, i) => (
-            <li key={i}>
-              {s.text && <p>{s.text}</p>}
+            <li key={i} className={s.done ? 'step-done' : ''}>
+              {s.text && <p>{s.done && <span className="step-r-tick" aria-label="Done">✓ </span>}<span className="step-r-t">{s.text}</span></p>}
+              {s.due && <p className="step-r-due"><DuePicker value={s.due} task={{ due: s.due, done: s.done }} canEdit={false} onChange={() => {}} /></p>}
               {s.location && <p className="step-r-loc"><PinIcon /><span>{s.location}</span><MapsLink place={s.location} /></p>}
+              {s.done && s.rating > 0 && (
+                <p className="step-r-rate"><span className="rate-bar" aria-hidden="true"><span style={{ width: `${(s.rating / MAX_RATING) * 100}%` }} /></span>
+                  {ratingWord(s.rating)} · {s.rating}/{MAX_RATING}</p>
+              )}
               {s.url && <a className="step-r-link" href={s.url} target="_blank" rel="noopener noreferrer"><LinkIcon /><span>{s.url}</span></a>}
             </li>
           ))}
@@ -158,9 +167,15 @@ function StepsField({ value, canEdit, onSave }) {
     if (!sameSteps(fixed, value)) onSave(fixed);
   }
   const set = (key, field) => (e) => {
-    const v = e.target.value;
+    const v = field === 'rating' ? Number(e.target.value) : e.target.value;
     setSteps((cur) => cur.map((s) => (s.key === key ? { ...s, [field]: v } : s)));
     if (field === 'url' && badUrl === key) setBadUrl(null);
+  };
+  // a tick or a date: saved straight away
+  const change = (key, patch) => {
+    const next = steps.map((s) => (s.key === key ? { ...s, ...patch } : s));
+    setSteps(next);
+    save(next);
   };
   const openLink = (key) => setSteps((cur) => cur.map((s) => (s.key === key ? { ...s, linkOpen: true } : s)));
   const remove = (key) => {
@@ -175,9 +190,17 @@ function StepsField({ value, canEdit, onSave }) {
     <div className="steps">
       <span className="steps-h">What&apos;s going to be done</span>
       {steps.map((s, i) => (
-        <div className="step" key={s.key}>
+        <div className={s.done ? 'step done' : 'step'} key={s.key}>
           <div className="step-top">
-            <span className="step-n">{steps.length > 1 ? `Step ${i + 1}` : ''}</span>
+            {/* tick it off once there's something written to do */}
+            {s.text.trim() ? (
+              <label className="step-tick">
+                <input type="checkbox" checked={!!s.done} onChange={() => change(s.key, { done: !s.done })}
+                  aria-label={`Step ${i + 1}: ${s.done ? 'done' : 'mark as done'}`} />
+                <span>{s.done ? 'Done' : steps.length > 1 ? `Step ${i + 1}` : 'Mark done'}</span>
+              </label>
+            ) : <span className="step-n">{steps.length > 1 ? `Step ${i + 1}` : ''}</span>}
+            <span className="step-gap" />
             <MapsLink place={s.location.trim()} />
             {(steps.length > 1 || s.text || s.location || s.url) && (
               <button type="button" className="ic step-x" onClick={() => remove(s.key)} aria-label={`Remove step ${i + 1}`}>✕</button>
@@ -192,6 +215,26 @@ function StepsField({ value, canEdit, onSave }) {
               onBlur={() => save()} onKeyDown={enterBlurs} autoComplete="off"
               placeholder="Location, e.g. Westlands, Nairobi" aria-label={`Step ${i + 1}: location`} />
           </span>
+          {/* its own day (no time) */}
+          {s.text.trim() && (
+            <span className="step-due">
+              <DuePicker value={s.due || null} task={{ due: s.due, done: s.done }} onChange={(due) => change(s.key, { due: due || '' })} />
+            </span>
+          )}
+          {/* once it's ticked off: how was it? Saved when you let go of the slider */}
+          {s.done && (
+            <div className="step-rate">
+              <span className="step-rate-top">
+                <span>Rate the experience</span>
+                <span className={s.rating ? 'rate-val on' : 'rate-val'}>{ratingWord(s.rating)}{s.rating ? ` · ${s.rating}/${MAX_RATING}` : ''}</span>
+              </span>
+              <input type="range" className="rate-in" min={0} max={MAX_RATING} step={1} value={s.rating}
+                style={{ '--fill': `${(s.rating / MAX_RATING) * 100}%` }} onChange={set(s.key, 'rating')}
+                onPointerUp={() => save()} onKeyUp={() => save()} onBlur={() => save()}
+                aria-label={`Step ${i + 1}: rate the experience`} aria-valuetext={`${ratingWord(s.rating)}, ${s.rating} out of ${MAX_RATING}`} />
+              <span className="rate-ticks" aria-hidden="true"><span>0</span><span>5</span><span>10</span></span>
+            </div>
+          )}
           {s.url || s.linkOpen ? (
             <span className="line-row">
               <LinkIcon />

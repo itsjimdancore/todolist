@@ -185,6 +185,12 @@ describe('tasks', () => {
     assertFails(addDoc(collection(as('writer'), 'lists', LIST, 'tasks'), task('writer', { location: 'x'.repeat(201) }))));
   test('can set the steps of what is going to be done', () =>
     assertSucceeds(updateDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1'), { steps: [{ text: 'E bike riding', location: 'Tigoni', url: '' }], ...stamp('rw') })));
+  test('steps can be ticked off, dated and rated', () =>
+    assertSucceeds(updateDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1'), { steps: [{ text: 'Coffee', location: 'Kaffe Brix', url: '', due: '2026-12-05', done: true, rating: 8 }], ...stamp('rw') })));
+  test('a task can happen during a month (and not on a day)', () =>
+    assertSucceeds(updateDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1'), { month: '2026-12', due: null, start: null, mins: null, ...stamp('rw') })));
+  test('the month must be YYYY-MM', () =>
+    assertFails(updateDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1'), { month: '2026-13', ...stamp('rw') })));
   test('at most 20 steps', () =>
     assertFails(addDoc(collection(as('writer'), 'lists', LIST, 'tasks'), task('writer', { steps: Array.from({ length: 21 }, () => ({ text: 'x', location: '', url: '' })) }))));
   test('reader cannot set a location', () =>

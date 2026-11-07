@@ -1210,10 +1210,25 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .due-d.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; box-shadow: none; }
 .due-clear { margin-top: 4px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--danger); font-size: 13px; }
 .due-clear:hover { background: var(--danger-soft); }
+/* a task's date: On a day (with a time) or During a month (no set day), side by side at the top */
+.due-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 3px; margin-bottom: 6px; border-radius: 9px; background: var(--sunk); }
+.due-modes button { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 4px; border: none; border-radius: 7px;
+  background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; }
+.due-modes button small { font-size: 10.5px; font-weight: 400; }
+.due-modes button:hover { color: var(--fg); }
+.due-modes button.on { background: var(--surface); color: var(--accent); box-shadow: 0 1px 3px rgb(0 0 0 / .3); }
+.due-months { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 0 2px 4px; }
+.due-m { height: 40px; border: none; border-radius: 8px; background: transparent; color: var(--fg); font-size: 13.5px; }
+.due-m:hover { background: var(--sunk); }
+.due-m.past { color: #5d6d68; }
+.due-m.today { box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent); font-weight: 600; }
+.due-m.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; box-shadow: none; }
 /* phones: the picker becomes a sheet along the bottom of the screen */
 @media (max-width: 640px) {
   .due-pop { top: auto !important; left: 12px !important; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); width: auto; }
   .due-d { height: 38px; font-size: 14px; }
+  .due-m { height: 46px; font-size: 15px; }
+  .due-modes button { padding: 9px 4px; font-size: 14px; }
 }
 
 /* ---------- Calendar ---------- */
@@ -1592,6 +1607,10 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .sl-t { overflow-wrap: anywhere; }
 .sl-loc { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; overflow-wrap: anywhere; }
 .sl-loc svg { flex: none; width: 13px; height: 13px; color: var(--accent); }
+.sl-tick { color: var(--accent); font-weight: 700; margin-right: -6px; }
+.sl-done .sl-t { text-decoration: line-through; }
+.sl-due { font-size: 12px; font-family: var(--mono); }
+.sl-rate { font-size: 12px; color: var(--accent); }
 /* the ⋯ on each task, opening the same menu as a list's ⋮ */
 .task-more { display: grid; place-items: center; width: 34px; height: 34px; border: none; border-radius: 8px; background: transparent; color: var(--muted); }
 .task-more:hover, .task-more[aria-expanded="true"] { background: var(--sunk); color: var(--fg); }
@@ -1638,6 +1657,17 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .step-top { display: flex; align-items: center; gap: 8px; min-height: 22px; }
 .step-n { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
 .step-x { padding: 2px 6px; }
+.step-gap { flex: 1; }
+/* tick a step off once it's written; a done step's text is struck through and the rating slider shows */
+.step-tick { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.step-tick input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.step.done .step-tick { color: var(--accent); }
+.steps .step.done input.line-in:first-of-type { text-decoration: line-through; color: var(--muted); }
+.step-due { display: flex; }
+.rate-ticks { display: flex; justify-content: space-between; padding: 0 3px; font-size: 10.5px; font-family: var(--mono); color: var(--muted); }
+.steps-read li.step-done .step-r-t { text-decoration: line-through; color: var(--muted); }
+.step-r-tick { color: var(--accent); font-weight: 700; }
+.step-r-due { margin-top: 4px !important; }
 .steps input.line-in:not([type=checkbox]):not([type=radio]) { width: 100%; padding: 6px 2px; border: none; border-bottom: 1px solid var(--line);
   border-radius: 0; background: transparent; font-size: 14.5px; color: var(--fg); }
 .steps input.line-in:not([type=checkbox]):not([type=radio]):focus { outline: none; border-bottom-color: var(--accent); }
@@ -1655,6 +1685,27 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .step-r-loc, .step-r-link { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin-top: 2px; color: var(--muted); font-size: 13px; }
 .step-r-loc svg, .step-r-link svg { flex: none; }
 .step-r-link { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+/* rate the experience of a step: a slim track filled up to the thumb, the word and number above on the right */
+.step-rate { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+.step-rate-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.rate-val { font-variant-numeric: tabular-nums; }
+.rate-val.on { color: var(--accent); font-weight: 600; }
+/* (the general input rule near the top is more specific than ".rate-in", so this needs the same :not()s to win) */
+input.rate-in:not([type=checkbox]):not([type=radio]) { -webkit-appearance: none; appearance: none; width: 100%; height: 20px; margin: 0; padding: 0;
+  border: none; border-radius: 0; background: transparent; cursor: pointer; touch-action: pan-y; }
+.rate-in::-webkit-slider-runnable-track { height: 6px; border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) var(--fill, 0%), var(--line) var(--fill, 0%)); }
+.rate-in::-moz-range-track { height: 6px; border-radius: 999px; background: var(--line); }
+.rate-in::-moz-range-progress { height: 6px; border-radius: 999px; background: var(--accent); }
+.rate-in::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px; border: 2px solid var(--accent);
+  border-radius: 50%; background: var(--surface); box-shadow: 0 1px 3px rgb(0 0 0 / .35); }
+.rate-in::-moz-range-thumb { width: 14px; height: 14px; border: 2px solid var(--accent); border-radius: 50%; background: var(--surface); }
+.rate-in:focus-visible { outline: none; }
+.rate-in:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--accent-soft); }
+.rate-in:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px var(--accent-soft); }
+.step-r-rate { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.rate-bar { flex: none; width: 70px; height: 5px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.rate-bar > span { display: block; height: 100%; background: var(--accent); }
 @media (max-width: 560px) {
   .steps input.line-in:not([type=checkbox]):not([type=radio]) { font-size: 16px; padding: 9px 2px; } /* no zoom-in on iPhone, bigger to tap */
 }
@@ -1677,8 +1728,13 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
   .task-modal > .cal-panel-h .ic { min-width: 40px; min-height: 40px; font-size: 16px; }
   /* bigger things to tap in the steps */
   .step-x { min-width: 36px; min-height: 36px; }
+  .step-tick { min-height: 36px; font-size: 13px; }
+  .step-tick input { width: 22px; height: 22px; }
   .step-top .td-maps { padding: 6px 0; }
   .step-link-add { padding: 8px 0; font-size: 13.5px; }
+  input.rate-in:not([type=checkbox]):not([type=radio]) { height: 32px; } /* bigger to grab with a thumb */
+  .rate-in::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: -9px; }
+  .rate-in::-moz-range-thumb { width: 20px; height: 20px; }
   .step-add { min-height: 42px; padding: 0 16px; font-size: 14px; }
   .td-acts { grid-template-columns: 1fr; }
   .td-acts .btn { height: 46px; }

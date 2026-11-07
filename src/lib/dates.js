@@ -45,15 +45,18 @@ export function dueLabel(key) {
   return d.toLocaleDateString('en-GB', opts);
 }
 
-export const isOverdue = (task) => !!task.due && !task.done && task.due < todayKey();
+// past its day, or (a month task) past its month
+export const isOverdue = (task) => !task.done && (task.due ? task.due < todayKey() : !!task.month && task.month < thisMonthKey());
 
 // How a list orders its tasks, so setting a date moves the task into place by itself:
-// open tasks with a date first, soonest first (so overdue ones are on top); on the same day, all-day ones and
+// open tasks with a date (or a month, after that month's days) first, soonest first (so overdue ones are on top); on the same day, all-day ones and
 // then by start time; then open tasks with no date; finished tasks last. Ties keep their order (newest first).
 export function byDue(a, b) {
   if (!!a.done !== !!b.done) return a.done ? 1 : -1;
-  if (!a.due !== !b.due) return a.due ? -1 : 1;
-  if (a.due && b.due && a.due !== b.due) return a.due < b.due ? -1 : 1;
+  const wa = whenKey(a);
+  const wb = whenKey(b);
+  if (!wa !== !wb) return wa ? -1 : 1;
+  if (wa && wb && wa !== wb) return wa < wb ? -1 : 1;
   if ((a.start || '') !== (b.start || '')) return (a.start || '') < (b.start || '') ? -1 : 1;
   return 0;
 }
@@ -96,3 +99,19 @@ export const timeRange = (start, mins = DEFAULT_MINS) =>
 export const hourLabel = (h) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
 
 export const longDay = (key) => fromKey(key).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+// ---- "during a month": a task can be set to happen sometime in a month instead of on a day, stored as 'YYYY-MM'
+export const monthKeyOf = (y, m) => `${y}-${pad(m + 1)}`; // m: 0 = January
+export const thisMonthKey = () => todayKey().slice(0, 7);
+// "This month", "Next month", "December", or "January 2028" outside this year
+export function monthLabel(key) {
+  const [y, m] = key.split('-').map(Number);
+  const now = new Date();
+  if (key === thisMonthKey()) return 'This month';
+  if (key === monthKeyOf(new Date(now.getFullYear(), now.getMonth() + 1, 1).getFullYear(), (now.getMonth() + 1) % 12)) return 'Next month';
+  const opts = { month: 'long' };
+  if (y !== now.getFullYear()) opts.year = 'numeric';
+  return new Date(y, m - 1, 1).toLocaleDateString('en-GB', opts);
+}
+// How to order by date: a day, or for a month task the end of that month (after every day in it)
+export const whenKey = (t) => t.due || (t.month ? `${t.month}-99` : '');

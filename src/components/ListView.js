@@ -13,7 +13,7 @@ import {
 import { PERMISSIONS, canComment, canWrite, roleLabel } from '@/lib/permissions';
 import PeopleStack from './PeopleStack';
 import BackLink from './BackLink';
-import { byDue, dueLabel } from '@/lib/dates';
+import { byDue, dueLabel, monthLabel } from '@/lib/dates';
 import { stepsPatch } from '@/lib/steps';
 import { useToast } from './Toast';
 import AddTask from './AddTask';
@@ -102,8 +102,11 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
     onToggle: () => run(updateTask(list, t, user, { done: !t.done })),
     onEdit: (text) => run(updateTask(list, t, user, { text })),
     // removing the date also removes its time
-    onDue: (due) => run(updateTask(list, t, user, due ? { due } : { due: null, start: null, mins: null }),
+    onDue: (due) => run(updateTask(list, t, user, due ? { due, month: null } : { due: null, start: null, mins: null }),
       due ? `Due ${dueLabel(due).toLowerCase()}` : 'Due date removed'),
+    // sometime during a month instead of on a day: no day, no time
+    onMonth: (month) => run(updateTask(list, t, user, month ? { month, due: null, start: null, mins: null } : { month: null }),
+      month ? `During ${monthLabel(month).toLowerCase()}` : 'Date removed'),
     // with Undo, which puts it straight back
     onArchive: () => run(updateTask(list, t, user, { archived: !t.archived }), {
       title: t.archived ? 'Task restored' : 'Task archived',
@@ -127,6 +130,7 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
         run(updateTask(list, t, user, { location }), location ? 'Location saved' : 'Location removed'),
       steps: (steps) => run(updateTask(list, t, user, stepsPatch(steps)), 'Saved'),
       due: p.onDue,
+      month: p.onMonth,
       schedule: (due, start, mins) => {
         const patch = { due, start: start || null, mins: start ? mins : null };
         if ((t.start || null) === patch.start && (t.mins || null) === patch.mins) return;

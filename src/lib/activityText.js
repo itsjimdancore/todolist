@@ -1,10 +1,13 @@
 // How a notification reads, in plain text. Shared by the bell / Notifications page (in the browser)
 // and the push sender (/api/push, on the server), so both always say the same thing.
-import { dueLabel } from './dates';
+import { dueLabel, monthLabel } from './dates';
 import { roleLabel } from './permissions';
 
 const quote = (t) => `“${t}”`;
-const dueText = (d) => { const [day, time] = d.split(' '); return `${dueLabel(day).toLowerCase()}${time ? ` at ${time}` : ''}`; };
+// 'YYYY-MM-DD', 'YYYY-MM-DD HH:MM', or a month 'YYYY-MM' (sometime during it)
+const dueText = (d) => {
+  if (/^\d{4}-\d{2}$/.test(d)) return `sometime ${/month/.test(monthLabel(d)) ? monthLabel(d).toLowerCase() : `in ${monthLabel(d)}`}`;
+  const [day, time] = d.split(' '); return `${dueLabel(day).toLowerCase()}${time ? ` at ${time}` : ''}`; };
 
 // Activity on a list or letter: its tag, and what the person did (read as "<who> <did> “<list>”").
 // text: the task or comment it's about; detail: the extra bit (old name, a date, someone's email, an access level).

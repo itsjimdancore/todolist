@@ -289,7 +289,7 @@ service cloud.firestore {
       // ---------- tasks ----------
       match /tasks/{taskId} {
         function validTask(d) {
-          return d.keys().hasOnly(['text', 'done', 'archived', 'due', 'start', 'mins', 'notes', 'location', 'links', 'steps', 'createdBy', 'createdByName',
+          return d.keys().hasOnly(['text', 'done', 'archived', 'due', 'month', 'start', 'mins', 'notes', 'location', 'links', 'steps', 'createdBy', 'createdByName',
                                    'createdAt', 'updatedAt', 'updatedBy', 'updatedByName'])
             // optional time on the due day: start 'HH:MM', length in minutes
             && (d.get('start', null) == null || (d.start is string && d.start.matches('([01][0-9]|2[0-3]):[0-5][0-9]')))
@@ -300,12 +300,14 @@ service cloud.firestore {
             && (d.get('location', '') is string && d.get('location', '').size() <= 200)
             // optional links: [{ url, title }], up to 10 (the app checks each one is http(s))
             && (d.get('links', []) is list && d.get('links', []).size() <= 10)
-            // optional steps of what's going to be done: [{ text, location, url }], up to 20
+            // optional steps of what's going to be done: [{ text, location, url, due, done, rating }], up to 20
             && (d.get('steps', []) is list && d.get('steps', []).size() <= 20)
             && d.text is string && d.text.size() >= 1 && d.text.size() <= 500
             && d.done is bool && d.archived is bool
             // optional due date: a whole day, 'YYYY-MM-DD'
             && (d.get('due', null) == null || (d.due is string && d.due.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')))
+            // or instead: sometime during a month, 'YYYY-MM'
+            && (d.get('month', null) == null || (d.month is string && d.month.matches('[0-9]{4}-(0[1-9]|1[0-2])')))
             && d.updatedBy == request.auth.uid;
         }
 

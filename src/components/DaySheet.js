@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { addTask, createList, ensureUnplaced, isUnplaced, nameOf, unplacedId, UNPLACED_TITLE } from '@/lib/data';
-import { DEFAULT_MINS, dueLabel, fromKey, isOverdue, timeRange, todayKey } from '@/lib/dates';
+import { DEFAULT_MINS, dueLabel, fromKey, monthLabel, isOverdue, timeRange, todayKey } from '@/lib/dates';
 import { friendlyError } from '@/lib/firebase';
 import { hostOf, linkLabel, normalizeUrl } from '@/lib/links';
 import { canWrite } from '@/lib/permissions';
@@ -127,7 +127,7 @@ function Row({ n, entry, actions, confirming, setConfirm }) {
         ) : <span className="ds-none">—</span>}
       </div>
       <div className="ds-cell ds-when" data-label="Date & time">
-        <span>{t.due ? dateShort(t.due) : 'No date'}</span>
+        <span>{t.due ? dateShort(t.due) : t.month ? monthLabel(t.month) : 'No date'}</span>
         <span className="ds-time">{t.due ? (t.start ? timeRange(t.start, t.mins) : 'All day') : ''}</span>
       </div>
       <div className="ds-cell ds-by" data-label="Added by">

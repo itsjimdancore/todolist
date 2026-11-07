@@ -4,7 +4,7 @@ import { addTask, addTaskLink, createList, deleteTask, isUnplaced, removeTaskLin
 import { stepsPatch } from '@/lib/steps';
 import {
   DEFAULT_MINS, addDays, dueLabel, fromKey, fromMin, hourLabel, isOverdue, longDay, monthDays,
-  monthTitle, snap, time12, timeRange, toKey, toMin, todayKey, weekday,
+  monthLabel, monthTitle, snap, time12, timeRange, toKey, toMin, todayKey, weekday,
 } from '@/lib/dates';
 import { friendlyError } from '@/lib/firebase';
 import { useHolidayCountries, useHolidayCountry, useHolidays } from '@/lib/holidays';
@@ -141,7 +141,11 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
     toggle: ({ t, l }) => run(updateTask(l, t, user, { done: !t.done })),
     // just the day (keeps the time); no day = no time either
     due: ({ t, l }, due) => t.due !== due &&
-      run(updateTask(l, t, user, due ? { due } : { due: null, start: null, mins: null }), due ? `Due ${when(due, t.start, t.mins)}` : 'Due date removed'),
+      run(updateTask(l, t, user, due ? { due, month: null } : { due: null, start: null, mins: null }), due ? `Due ${when(due, t.start, t.mins)}` : 'Due date removed'),
+    // sometime during a month instead of on a day: no day, no time (it then waits with the tasks that have no day)
+    month: ({ t, l }, month) => (t.month || null) !== month &&
+      run(updateTask(l, t, user, month ? { month, due: null, start: null, mins: null } : { month: null }),
+        month ? `During ${monthLabel(month).toLowerCase()}` : 'Date removed'),
     // day + time together; start null = all day
     schedule: ({ t, l }, due, start, mins) => {
       const patch = { due, start: start || null, mins: start ? mins || DEFAULT_MINS : null };
@@ -1063,6 +1067,7 @@ function TaskPanel({ entry, actions, onClose }) {
     location: (location) => actions.location(entry, location),
     steps: (steps) => actions.steps(entry, steps),
     due: (due) => actions.due(entry, due),
+    month: (month) => actions.month(entry, month),
     schedule: (due, start, mins) => actions.schedule(entry, due, start, mins),
     addLink: (link) => actions.addLink(entry, link),
     removeLink: (link) => actions.removeLink(entry, link),
@@ -1102,7 +1107,8 @@ function NoDateTray({ lists, items, actions, dragProps, onClose }) {
             {its.map((e) => (
               <li key={e.t.id} className="cal-r tray">
                 <button type="button" className={canWrite(l.role) ? 'cal-r-t grab' : 'cal-r-t'} {...dragProps(e)}>{e.t.text}</button>
-                <DuePicker value={null} task={e.t} canEdit={canWrite(l.role)} onChange={(due) => actions.due(e, due)} compact />
+                <DuePicker value={null} month={e.t.month || null} task={e.t} canEdit={canWrite(l.role)} onChange={(due) => actions.due(e, due)}
+                  onMonth={(month) => actions.month(e, month)} compact />
               </li>
             ))}
           </ul>
@@ -1222,7 +1228,7 @@ function AddTaskDialog({ lists, byList, init, user, onClose }) {
                             <span className="cal-pick-t">{c.t.text}</span>
                             <span className="cal-r-m">
                               <i style={{ background: colorFor(c.l.id) }} />{c.l.title}
-                              {' · '}{c.t.due ? <em className={isOverdue(c.t) ? 'late-txt' : ''}>{dueLabel(c.t.due)}{c.t.start ? ` ${time12(c.t.start)}` : ''}</em> : 'No date'}
+                              {' · '}{c.t.due ? <em className={isOverdue(c.t) ? 'late-txt' : ''}>{dueLabel(c.t.due)}{c.t.start ? ` ${time12(c.t.start)}` : ''}</em> : c.t.month ? monthLabel(c.t.month) : 'No date'}
                             </span>
                           </span>
                         </label>

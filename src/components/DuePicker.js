@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { dueLabel, fromKey, isOverdue, monthDays, monthTitle, quickDates, toKey, todayKey } from '@/lib/dates';
+import { dueLabel, fromKey, isOverdue, monthDays, monthKeyOf, monthLabel, monthTitle, quickDates, thisMonthKey, toKey, todayKey } from '@/lib/dates';
 
 const HEADS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -14,7 +14,11 @@ export function CalIcon({ size = 14 }) {
 
 // The due-date pill on a task. Opens quick picks + a small month; read-only roles just see the date.
 // compact: an icon-only button (next to "Add a task") until a date is picked.
-export default function DuePicker({ value, onChange, task, canEdit = true, compact = false, time = null }) {
+// month / onMonth (optional): the task can instead happen sometime during a month ('YYYY-MM', no time); with
+// onMonth the picker has two choices at the top, On a day and During a month.
+// label: what the empty button says (a step's date is "Due date" too, but could say something else)
+export default function DuePicker({ value, onChange, task, canEdit = true, compact = false, time = null,
+  month = null, onMonth = null, label: what = 'Due date' }) {
   const [open, setOpen] = useState(null); // where the picker sits on screen while open
   const box = useRef(null);
   const btn = useRef(null);
@@ -56,27 +60,33 @@ export default function DuePicker({ value, onChange, task, canEdit = true, compa
     setOpen({ left, top });
   }
 
-  const cls = ['due', value ? 'set' : 'empty', overdue && 'late', task?.done && 'done', compact && !value && 'icon-only']
+  const set = value || month;
+  const cls = ['due', set ? 'set' : 'empty', overdue && 'late', task?.done && 'done', compact && !set && 'icon-only']
     .filter(Boolean).join(' ');
-  const label = value ? `${overdue ? 'Overdue · ' : ''}${dueLabel(value)}${time ? ` · ${time}` : ''}` : compact ? '' : 'Due date';
+  const late = overdue ? 'Overdue · ' : '';
+  const label = value ? `${late}${dueLabel(value)}${time ? ` · ${time}` : ''}`
+    : month ? `${late}${monthLabel(month).includes('month') ? monthLabel(month) : `During ${monthLabel(month)}`}`
+    : compact ? '' : what;
 
-  if (!canEdit) return value ? <span className={cls}><CalIcon size={12} />{label}</span> : null;
+  if (!canEdit) return set ? <span className={cls}><CalIcon size={12} />{label}</span> : null;
 
   const pick = (key) => { onChange(key); setOpen(null); };
+  const pickMonth = (key) => { onMonth(key); setOpen(null); };
 
   return (
     <div className="due-wrap" ref={box}>
       <button type="button" ref={btn} className={cls} onClick={toggle} aria-expanded={!!open} aria-haspopup="dialog"
-        aria-label={value ? `Due ${dueLabel(value)}. Change due date` : 'Add a due date'} title={value ? 'Change due date' : 'Add a due date'}>
-        <CalIcon size={value || compact ? 13 : 12} />{label}
+        aria-label={set ? `${label}. Change the date` : `Add a ${what.toLowerCase()}`} title={set ? 'Change the date' : `Add a ${what.toLowerCase()}`}>
+        <CalIcon size={set || compact ? 13 : 12} />{label}
       </button>
-      {open && <Popover value={value} onPick={pick} at={open} />}
+      {open && <Popover value={value} onPick={pick} at={open} month={month} onMonth={onMonth ? pickMonth : null} />}
     </div>
   );
 }
 
-function Popover({ value, onPick, at }) {
-  const start = value ? fromKey(value) : new Date();
+function Popover({ value, onPick, at, month, onMonth }) {
+  const [mode, setMode] = useState(month && !value ? 'month' : 'day');
+  const start = value ? fromKey(value) : month ? fromKey(`${month}-01`) : new Date();
   const [ym, setYm] = useState([start.getFullYear(), start.getMonth()]);
   const [y, m] = ym;
   const today = todayKey();
@@ -84,6 +94,17 @@ function Popover({ value, onPick, at }) {
 
   return (
     <div className="due-pop" role="dialog" aria-label="Due date" style={{ left: at.left, top: at.top }}>
+      {onMonth && (
+        <div className="due-modes" role="tablist" aria-label="When it happens">
+          <button type="button" role="tab" aria-selected={mode === 'day'} className={mode === 'day' ? 'on' : ''} onClick={() => setMode('day')}>
+            On a day<small>with a time</small>
+          </button>
+          <button type="button" role="tab" aria-selected={mode === 'month'} className={mode === 'month' ? 'on' : ''} onClick={() => setMode('month')}>
+            During a month<small>no set day</small>
+          </button>
+        </div>
+      )}
+      {mode === 'month' ? <MonthGrid year={y} value={month} onPick={onMonth} shiftYear={(n) => shift(12 * n)} /> : (<>
       {quickDates().map((q) => (
         <button key={q.label} type="button" className={value === q.key ? 'due-q on' : 'due-q'} onClick={() => onPick(q.key)}>
           {q.label}<small>{fromKey(q.key).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</small>
@@ -108,9 +129,37 @@ function Popover({ value, onPick, at }) {
           );
         })}
       </div>
-      {value && (
-        <button type="button" className="due-clear" onClick={() => onPick(null)}>Remove date</button>
+      </>)}
+      {(value || month) && (
+        <button type="button" className="due-clear" onClick={() => (value ? onPick(null) : onMonth(null))}>Remove date</button>
       )}
     </div>
+  );
+}
+
+// During a month: the twelve months of a year to pick from, with arrows for the year
+function MonthGrid({ year, value, onPick, shiftYear }) {
+  const now = thisMonthKey();
+  const name = (m, opts) => new Date(year, m, 1).toLocaleDateString('en-GB', opts);
+  return (
+    <>
+      <div className="due-mh">
+        <b>{year}</b>
+        <button type="button" className="ic" onClick={() => shiftYear(-1)} aria-label="Previous year">‹</button>
+        <button type="button" className="ic" onClick={() => shiftYear(1)} aria-label="Next year">›</button>
+      </div>
+      <div className="due-months">
+        {Array.from({ length: 12 }, (_, m) => {
+          const k = monthKeyOf(year, m);
+          const cls = ['due-m', k === now && 'today', k === value && 'on', k < now && 'past'].filter(Boolean).join(' ');
+          return (
+            <button key={k} type="button" className={cls} onClick={() => onPick(k)} aria-pressed={k === value}
+              aria-label={name(m, { month: 'long', year: 'numeric' })}>
+              {name(m, { month: 'short' })}
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }

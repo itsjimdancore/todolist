@@ -511,7 +511,7 @@ function taskKind(task, patch) {
   if ('done' in patch) return patch.done ? 'task-done' : 'task-undone';
   if ('archived' in patch) return patch.archived ? 'task-archive' : 'task-restore';
   if ('text' in patch) return 'task-edit';
-  if ('due' in patch || 'start' in patch) return 'task-due';
+  if ('due' in patch || 'start' in patch || 'month' in patch) return 'task-due';
   if ('notes' in patch || 'location' in patch || 'steps' in patch) return 'task-notes'; // what's going to be done, and where
   return null;
 }
@@ -521,7 +521,7 @@ export function updateTask(list, task, user, patch, kind = taskKind(task, patch)
   const b = writeBatch(db());
   b.update(doc(tasksCol(list.id), task.id), { ...patch, ...stamp(user) });
   b.update(listRef(list.id), { updatedAt: serverTimestamp() });
-  const due = 'due' in patch ? patch.due || '' : '';
+  const due = patch.month || ('due' in patch ? patch.due || '' : '');
   if (kind) {
     notify(b, list, user, kind, {
       text: patch.text || task.text,
