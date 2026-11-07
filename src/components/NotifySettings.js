@@ -7,14 +7,15 @@ import { sendTestPush } from '@/lib/push';
 import { BLOCKED_HELP, usePush } from './DevicePush';
 import { useToast } from './Toast';
 
-// "Also while I'm using the app": kept where the service worker can read it (it decides what to show)
+// "Also while I'm using the app": kept where the service worker can read it (it decides what to show).
+// On unless it was turned off ('0').
 const PREF = '/__prefs/while-open';
 async function readWhileOpen() {
   try {
     const r = await (await caches.open('todo-prefs')).match(PREF);
-    return !!r && (await r.text()) === '1';
+    return !r || (await r.text()) !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 async function saveWhileOpen(on) {
@@ -54,7 +55,7 @@ export default function NotifySettings({ user, onClose }) {
   const toast = useToast();
   const push = usePush(user);
   const [prefs, setPrefs] = useState(null);
-  const [whileOpen, setWhileOpen] = useState(false);
+  const [whileOpen, setWhileOpen] = useState(true);
   const [testing, setTesting] = useState(false);
   const box = useRef(null);
 
@@ -109,7 +110,7 @@ export default function NotifySettings({ user, onClose }) {
                 <span>Notifications come from other people&apos;s changes, never your own, so this is the way to try it yourself.</span>
               </div>
             )}
-            <Row title="Also while I'm using the app" hint="Normally a pop-up inside the app is enough while you're looking at it.">
+            <Row title="Also while I'm using the app" hint="On: they show every time, even while you're looking at the app. Off: just a pop-up inside the app while it's open.">
               <Switch on={whileOpen} disabled={!deviceOn} label="Also while I'm using the app"
                 onChange={(v) => { setWhileOpen(v); saveWhileOpen(v); }} />
             </Row>

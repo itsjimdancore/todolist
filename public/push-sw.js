@@ -7,13 +7,14 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
-// "Also while I'm using the app": the page saves it in Cache Storage, which this worker can read
+// "Also while I'm using the app": the page saves it in Cache Storage, which this worker can read.
+// On unless it was turned off ('0'), so notifications show even while the app is open.
 async function whileOpen() {
   try {
     const res = await (await caches.open('todo-prefs')).match('/__prefs/while-open');
-    return !!res && (await res.text()) === '1';
+    return !res || (await res.text()) !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 

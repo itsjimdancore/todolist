@@ -274,8 +274,8 @@ Firebase Hosting works too, but Vercel is the simplest option for Next.js.
 
 When someone else does something on a list you're on, you can get a notification on your computer or
 phone (a Windows toast, a macOS banner, Android's notification bar), even with the app's tab closed.
-You're never notified about your own changes. While the app is open in front of you, you get the in-app
-toast instead, so nothing shows twice (unless you turn on **Also while I'm using the app**).
+You're never notified about your own changes. They also show while the app is open in front of you,
+alongside the in-app toast; turn off **Also while I'm using the app** to get just the toast then.
 
 **How it works**
 
