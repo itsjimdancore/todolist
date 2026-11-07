@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_MINS, dueLabel, fromMin, isOverdue, timeRange, toMin, todayKey } from '@/lib/dates';
 import { colorFor } from '@/lib/people';
 import DuePicker from './DuePicker';
@@ -255,16 +255,37 @@ function StepsField({ value, canEdit, onSave }) {
 
 // A 0-10 slider to rate an experience (0 = not rated yet). onChange gets the input's change event as it moves;
 // onCommit runs when it's let go of (pointer, key or focus leaving), which is when it's saved.
+// On phones a drag can end without a pointerup (it turns into a scroll) and the slider may never get focus, so
+// it also saves itself a moment after the last change. (Saving twice is harmless: unchanged, nothing is sent.)
 function RatingSlider({ value, onChange, onCommit, ariaLabel, title = 'Rate the experience', hint = null }) {
+  const latest = useRef(onCommit);
+  latest.current = onCommit; // the timer saves with this render's (up-to-date) values
+  const timer = useRef(null);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const commit = () => { clearTimeout(timer.current); latest.current(); };
+  const changed = (e) => {
+    onChange(e);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => latest.current(), 700);
+  };
   return (
     <div className="step-rate">
       <span className="step-rate-top">
-        <span>{title}{hint && <span className="rate-hint"> · {hint}</span>}</span>
+        <span className="rate-title">{title}{hint && <small className="rate-hint">{hint}</small>}</span>
         <span className={value ? 'rate-val on' : 'rate-val'}>{ratingWord(value)}{value ? ` · ${value}/${MAX_RATING}` : ''}</span>
       </span>
       <input type="range" className="rate-in" min={0} max={MAX_RATING} step={1} value={value}
-        style={{ '--fill': `${(value / MAX_RATING) * 100}%` }} onChange={onChange}
-        onPointerUp={onCommit} onKeyUp={onCommit} onBlur={onCommit}
+        style={{ '--fill': `${(value / MAX_RATING) * 100}%` }} onChange={changed}
+        onPointerDown={(e) => {
+          // touch: a tap anywhere on the track jumps there (iPhone's slider otherwise only moves by its handle)
+          if (e.pointerType !== 'touch') return;
+          const r = e.currentTarget.getBoundingClientRect();
+          const half = 14; // half the handle on phones: the ends of the track are its centre at 0 and 10
+          const n = Math.round(((e.clientX - r.left - half) / Math.max(1, r.width - 2 * half)) * MAX_RATING);
+          const v = Math.min(MAX_RATING, Math.max(0, n));
+          if (v !== value) changed({ target: { value: String(v) } });
+        }}
+        onPointerUp={commit} onPointerCancel={commit} onTouchEnd={commit} onKeyUp={commit} onBlur={commit}
         aria-label={ariaLabel} aria-valuetext={`${ratingWord(value)}, ${value} out of ${MAX_RATING}`} />
       <span className="rate-ticks" aria-hidden="true"><span>0</span><span>5</span><span>10</span></span>
     </div>

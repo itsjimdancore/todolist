@@ -1654,15 +1654,17 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .steps-h { font-size: 13px; color: var(--muted); }
 .step { display: flex; flex-direction: column; gap: 6px; }
 .step + .step { padding-top: 12px; border-top: 1px dashed var(--line); }
-.step-top { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.step-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 22px; }
 .step-n { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
 .step-x { padding: 2px 6px; }
 .step-gap { flex: 1; }
 /* the whole thing rated overall, under its title */
 .overall-rate { padding: 10px 12px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--sunk); }
 .overall-rate .step-rate { padding-top: 0; }
-.overall-rate .step-rate-top > span:first-child { color: var(--fg); font-weight: 600; font-size: 13px; }
-.rate-hint { color: var(--muted); font-weight: 400; }
+.overall-rate .rate-title { color: var(--fg); font-weight: 600; font-size: 13px; }
+/* the title, with a hint (the steps' average) on a line of its own under it */
+.rate-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rate-hint { color: var(--muted); font-weight: 400; font-size: 11.5px; }
 .overall-read { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--sunk); font-size: 13.5px; }
 .t-rate { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; }
 /* tick a step off once it's written; a done step's text is struck through and the rating slider shows */
@@ -1694,8 +1696,8 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .step-r-link { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
 /* rate the experience of a step: a slim track filled up to the thumb, the word and number above on the right */
 .step-rate { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
-.step-rate-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
-.rate-val { font-variant-numeric: tabular-nums; }
+.step-rate-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.rate-val { flex: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rate-val.on { color: var(--accent); font-weight: 600; }
 /* (the general input rule near the top is more specific than ".rate-in", so this needs the same :not()s to win) */
 input.rate-in:not([type=checkbox]):not([type=radio]) { -webkit-appearance: none; appearance: none; width: 100%; height: 20px; margin: 0; padding: 0;
@@ -1739,9 +1741,22 @@ input.rate-in:not([type=checkbox]):not([type=radio]) { -webkit-appearance: none;
   .step-tick input { width: 22px; height: 22px; }
   .step-top .td-maps { padding: 6px 0; }
   .step-link-add { padding: 8px 0; font-size: 13.5px; }
-  input.rate-in:not([type=checkbox]):not([type=radio]) { height: 32px; } /* bigger to grab with a thumb */
-  .rate-in::-webkit-slider-thumb { width: 24px; height: 24px; margin-top: -9px; }
-  .rate-in::-moz-range-thumb { width: 20px; height: 20px; }
+  /* the rating slider: a taller strip to touch, a thicker track and a thumb-sized handle */
+  input.rate-in:not([type=checkbox]):not([type=radio]) { height: 40px; font-size: 16px; }
+  .rate-in::-webkit-slider-runnable-track { height: 8px; }
+  .rate-in::-moz-range-track, .rate-in::-moz-range-progress { height: 8px; }
+  .rate-in::-webkit-slider-thumb { width: 28px; height: 28px; margin-top: -10px; }
+  .rate-in::-moz-range-thumb { width: 24px; height: 24px; }
+  .step-rate-top { font-size: 13.5px; }
+  .rate-val { font-size: 14px; }
+  .rate-ticks { font-size: 11.5px; padding: 0 8px; }
+  .overall-rate { padding: 12px 14px 10px; }
+  .overall-rate .rate-title { font-size: 14.5px; }
+  .rate-hint { font-size: 12.5px; }
+  /* a step's date: as big to tap as the rest */
+  .step-due .due { height: 36px; padding: 0 14px; font-size: 13.5px; }
+  /* steps in a task row: a little bigger to read */
+  .sl-due, .sl-rate { font-size: 12.5px; }
   .step-add { min-height: 42px; padding: 0 16px; font-size: 14px; }
   .td-acts { grid-template-columns: 1fr; }
   .td-acts .btn { height: 46px; }
