@@ -201,13 +201,18 @@ function StepsField({ value, canEdit, onSave }) {
                 <span>{s.done ? 'Done' : steps.length > 1 ? `Step ${i + 1}` : 'Mark done'}</span>
               </label>
             ) : <span className="step-n">{steps.length > 1 ? `Step ${i + 1}` : ''}</span>}
+            {/* its own day (no time), beside the tick */}
+            {s.text.trim() && (
+              <span className="step-due">
+                <DuePicker value={s.due || null} task={{ due: s.due, done: s.done }} onChange={(due) => change(s.key, { due: due || '' })} />
+              </span>
+            )}
             <span className="step-gap" />
-            <MapsLink place={s.location.trim()} />
             {(steps.length > 1 || s.text || s.location || s.url) && (
               <button type="button" className="ic step-x" onClick={() => remove(s.key)} aria-label={`Remove step ${i + 1}`}>✕</button>
             )}
           </div>
-          <input type="text" className="line-in" maxLength={MAX_STEP_TEXT} value={s.text} onChange={set(s.key, 'text')}
+          <input type="text" className="line-in step-what" maxLength={MAX_STEP_TEXT} value={s.text} onChange={set(s.key, 'text')}
             onBlur={() => save()} onKeyDown={enterBlurs} autoComplete="off" autoFocus={!!s.fresh}
             placeholder={i ? 'What happens next?' : "What's going to be done?"} aria-label={`Step ${i + 1}: what's going to be done`} />
           <span className="line-row">
@@ -215,13 +220,9 @@ function StepsField({ value, canEdit, onSave }) {
             <input type="text" className="line-in" maxLength={MAX_LOCATION} value={s.location} onChange={set(s.key, 'location')}
               onBlur={() => save()} onKeyDown={enterBlurs} autoComplete="off"
               placeholder="Location, e.g. Westlands, Nairobi" aria-label={`Step ${i + 1}: location`} />
+            {s.location.trim() && <a className="td-maps" href={mapsUrl(s.location.trim())} target="_blank" rel="noopener noreferrer"
+              aria-label={`Open ${s.location.trim()} in Maps`}>Maps ↗</a>}
           </span>
-          {/* its own day (no time) */}
-          {s.text.trim() && (
-            <span className="step-due">
-              <DuePicker value={s.due || null} task={{ due: s.due, done: s.done }} onChange={(due) => change(s.key, { due: due || '' })} />
-            </span>
-          )}
           {/* once it's ticked off: how was it? Saved when you let go of the slider */}
           {s.done && (
             <RatingSlider value={s.rating} onChange={set(s.key, 'rating')} onCommit={() => save()}

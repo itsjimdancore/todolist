@@ -1652,8 +1652,10 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
    Open in Maps above them on the right, an optional link, and + to add another step */
 .steps { display: flex; flex-direction: column; gap: 12px; }
 .steps-h { font-size: 13px; color: var(--muted); }
-.step { display: flex; flex-direction: column; gap: 6px; }
-.step + .step { padding-top: 12px; border-top: 1px dashed var(--line); }
+/* each step a card of its own: tick + date + ✕ on top, then what, where, its rating and its link */
+.step { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunk); }
+.step.done { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.step .line-row > .td-maps { flex: none; }
 .step-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 22px; }
 .step-n { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
 .step-x { padding: 2px 6px; }
@@ -1671,8 +1673,9 @@ button.due:hover { border-color: var(--accent); color: var(--fg); }
 .step-tick { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
 .step-tick input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .step.done .step-tick { color: var(--accent); }
-.steps .step.done input.line-in:first-of-type { text-decoration: line-through; color: var(--muted); }
-.step-due { display: flex; }
+/* only what was done is struck through, not where or the link */
+.steps .step.done input.step-what:not([type=checkbox]) { text-decoration: line-through; color: var(--muted); }
+.step-due { display: flex; min-width: 0; }
 .rate-ticks { display: flex; justify-content: space-between; padding: 0 3px; font-size: 10.5px; font-family: var(--mono); color: var(--muted); }
 .steps-read li.step-done .step-r-t { text-decoration: line-through; color: var(--muted); }
 .step-r-tick { color: var(--accent); font-weight: 700; }
