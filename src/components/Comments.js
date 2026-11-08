@@ -28,18 +28,9 @@ function dayLabel(d) {
   });
 }
 const clock = (d) => d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-// Instagram-style short times: now, 5m, 2h, 3d, then the date
-function ago(d) {
-  const s = (Date.now() - d.getTime()) / 1000;
-  if (s < 60) return 'now';
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  if (s < 7 * 86400) return `${Math.floor(s / 86400)}d`;
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(d.getFullYear() !== new Date().getFullYear() && { year: 'numeric' }) });
-}
 const EMOJI = ['❤️', '🙌', '🔥', '👏', '😢', '😍', '😮', '😂'];
-// The list page narrower than this shows Tasks | Comments as tabs (globals.css, @container lv) and the comments
-// switch to the phone layout: a flat list like Instagram's instead of chat bubbles
+// The list page narrower than this shows Tasks | Comments as tabs (globals.css, @container lv) and the write box
+// switches to the phone one (emoji row, Post)
 const COMPACT_BELOW = 720;
 const firstName = (c) => (c.userName || c.userEmail || 'Someone').split(/[\s@]/)[0];
 
@@ -163,7 +154,7 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
       const showNew = i === firstNew;
       const cont = !!prev && !showDay && !showNew && prev.userId === c.userId && d - pd < GROUP_MS;
       return { c, d, showDay, showNew, newCount, cont, mine: c.userId === user.uid };
-    });
+    }).map((r, i, all) => ({ ...r, last: !all[i + 1]?.cont })); // the last of a run carries the avatar and the time
   }, [comments, since, user.uid]);
 
   function send(e) {
@@ -317,7 +308,7 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
       aria-label="Edit your comment"
       onFocus={(e) => {
         e.target.setSelectionRange(e.target.value.length, e.target.value.length);
-        e.target.closest('.c, .ig')?.scrollIntoView({ block: 'nearest' }); // Save and Cancel in view too
+        e.target.closest('.c')?.scrollIntoView({ block: 'nearest' }); // Save and Cancel in view too
       }}
       onChange={(e) => { setDraft(e.target.value); grow(e.target); }}
       onKeyDown={(e) => {
@@ -332,45 +323,6 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
       <button type="button" className="c-edit-cancel" onClick={() => setEditing(null)}>Cancel</button>
       <button type="button" className="c-edit-save" onClick={() => saveEdit(c)} disabled={!draft.trim()}>Save</button>
     </div>
-  );
-
-  // Phones: one comment like Instagram's. [avatar] name · 2h / the text / Reply · Edit · ⋯
-  const igRow = ({ c, d, showNew, newCount, mine }) => (
-    <Fragment key={c.id}>
-      {showNew && <div className="c-new" role="separator">New · {newCount}</div>}
-      <div
-        data-cid={c.id}
-        className={`ig${mine ? ' mine' : ''}${editing === c.id ? ' is-editing' : ''}`}
-        {...(editing === c.id ? {} : { ...pressProps(c), onDoubleClick: (e) => { e.preventDefault(); toggleLike(c, true); } })}
-      >
-        <Avatar person={{ email: c.userEmail, displayName: c.userName }} size={34} />
-        <div className="ig-body">
-          <div className="ig-top">
-            <b className="ig-name">{mine ? 'You' : c.userName || c.userEmail}</b>
-            <time dateTime={d.toISOString()} title={d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}>
-              {c.createdAt ? ago(d) : 'Posting…'}
-            </time>
-          </div>
-          {editing === c.id ? (
-            <>
-              {editField(c, 'ig-tx')}
-              {editActions(c, 'ig-acts')}
-            </>
-          ) : (
-            <>
-              <p className="ig-tx"><Text text={c.text} /></p>
-              <div className="ig-acts">
-                {c.editedAt && <span className="ig-edited" title={`Edited ${toDate(c.editedAt).toLocaleString()}`}>Edited</span>}
-                {!mine && <button type="button" onClick={() => reply(c)}>Reply</button>}
-                {mine && <button type="button" onClick={() => startEdit(c)}>Edit</button>}
-                <button type="button" className="ig-more" aria-label="More actions" onClick={() => openSheet(c)}><Ellipsis size={16} /></button>
-              </div>
-            </>
-          )}
-        </div>
-        <LikeButton c={c} liked={likedByMe(c)} pop={pop === c.id} label={likedBy(c)} onClick={() => toggleLike(c)} className="ig-heart" />
-      </div>
-    </Fragment>
   );
 
   // Phones: the emoji row, then [my avatar] [Add a comment…  Post]
@@ -424,28 +376,24 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
           </div>
         )}
 
-        {rows.map((row) => {
-          if (compact) return igRow(row);
-          const { c, d, showDay, showNew, newCount, cont, mine } = row;
+        {rows.map(({ c, d, showDay, showNew, newCount, cont, last, mine }) => {
           const full = d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+          const likes = (c.likes || []).length;
+          const isEditing = editing === c.id;
           return (
             <Fragment key={c.id}>
               {showDay && <div className="c-day" role="separator"><span>{dayLabel(d)}</span></div>}
               {showNew && <div className="c-new" role="separator">New · {newCount}</div>}
-              <div data-cid={c.id} className={`c${mine ? ' mine' : ''}${cont ? ' cont' : ''}${editing === c.id ? ' is-editing' : ''}`}>
-                {!mine && (cont ? <span className="c-sp" /> : <Avatar person={{ email: c.userEmail, displayName: c.userName }} size={28} />)}
+              {/* a message: [avatar] [bubble], mine on the right with my avatar; a run of one person's shares one avatar, at its foot */}
+              <div data-cid={c.id}
+                className={`c${mine ? ' mine' : ''}${cont ? ' cont' : ''}${last ? ' last' : ''}${likes ? ' has-react' : ''}${isEditing ? ' is-editing' : ''}`}>
+                <div className="c-av">
+                  {last && <Avatar person={{ email: c.userEmail, displayName: c.userName }} size={28} />}
+                </div>
                 <div className="c-col">
-                  {(!cont || c.editedAt) && (
-                    <div className="nm">
-                      {!cont && !mine && <b>{c.userName || c.userEmail}</b>}
-                      {!cont && <time className="tm" dateTime={d.toISOString()} title={full}>{c.createdAt ? clock(d) : 'sending…'}</time>}
-                      {c.editedAt && (
-                        <span className="tm c-edited" title={`Edited ${toDate(c.editedAt).toLocaleString()}`}>{cont ? 'edited' : '· edited'}</span>
-                      )}
-                    </div>
-                  )}
+                  {!cont && !mine && <div className="nm"><b>{c.userName || c.userEmail}</b></div>}
 
-                  {editing === c.id ? (
+                  {isEditing ? (
                     <>
                       <div className="bubble is-edit" style={{ width: `min(100%, ${Math.max(editW, 240)}px)` }}>
                         {editField(c, 'tx')}
@@ -453,7 +401,8 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
                       {editActions(c, 'c-edit-under')}
                     </>
                   ) : (
-                    <div className="bubble" title={cont ? full : undefined} {...pressProps(c)}>
+                    <div className="bubble" title={full} {...pressProps(c)}
+                      onDoubleClick={(e) => { if (e.target.closest('button')) return; e.preventDefault(); toggleLike(c, true); }}>
                       <div className="tx"><Text text={c.text} /></div>
                       {/* mouse and keyboard: a small toolbar on hover or focus */}
                       <div className="c-tools" role="toolbar" aria-label="Comment actions">
@@ -471,14 +420,26 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
                           </button>
                         )}
                       </div>
+                      {/* the ♥ reaction sits on the bubble's bottom corner once someone has liked it */}
+                      {likes > 0 && (
+                        <LikeButton c={c} liked={likedByMe(c)} pop={pop === c.id} label={likedBy(c)} onClick={() => toggleLike(c)} className="c-likes" />
+                      )}
                     </div>
                   )}
-                  {/* a little ♥ count under the bubble once someone has liked it */}
-                  {(c.likes || []).length > 0 && (
-                    <LikeButton c={c} liked={likedByMe(c)} pop={pop === c.id} label={likedBy(c)} onClick={() => toggleLike(c)} className="c-likes" />
+
+                  {/* the footer: the time under the last of a run, "Edited" under any edited one */}
+                  {!isEditing && (last || c.editedAt || !c.createdAt) && (
+                    <div className="c-foot-m">
+                      {(last || !c.createdAt) && (
+                        <time className="tm" dateTime={d.toISOString()} title={full}>{c.createdAt ? clock(d) : 'Sending…'}</time>
+                      )}
+                      {c.editedAt && (
+                        <span className="tm c-edited" title={`Edited ${toDate(c.editedAt).toLocaleString()}`}>{last && c.createdAt ? '· Edited' : 'Edited'}</span>
+                      )}
+                    </div>
                   )}
                 </div>
-                {editing !== c.id && (
+                {!isEditing && (
                   <button className="c-more" type="button" aria-label="Comment actions" onClick={() => openSheet(c)}>
                     <Ellipsis size={18} />
                   </button>
@@ -556,13 +517,13 @@ function ActionSheet({ c, mine, canDelete, confirm, onReply, onCopy, onEdit, onD
   );
 }
 
-// The ♥ with its count: on the right of each comment on phones (like Instagram), under the bubble otherwise
+// The ♥ with its count, as a reaction badge on the bubble's corner
 function LikeButton({ c, liked, pop, label, onClick, className }) {
   const n = (c.likes || []).length;
   return (
     <button type="button" className={`${className}${liked ? ' on' : ''}${pop ? ' pop' : ''}`} onClick={onClick}
       aria-pressed={liked} aria-label={liked ? `Unlike. ${label}` : `Like. ${label}`} title={label}>
-      <Heart size={className === 'ig-heart' ? 15 : 12} strokeWidth={2} fill={liked ? 'currentColor' : 'none'} />
+      <Heart size={12} strokeWidth={2} fill={liked ? 'currentColor' : 'none'} />
       {n > 0 && <span>{n}</span>}
     </button>
   );

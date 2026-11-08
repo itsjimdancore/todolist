@@ -602,6 +602,8 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
       out.push({ m, first, key: m.id });
       prev = m;
     }
+    // the last of a group carries the avatar and the footer (time, ticks)
+    out.forEach((r, i) => { if (r.m) { const next = out.slice(i + 1).find((x) => x.m); r.last = !next || next.first; } });
     return out;
   }, [messages]);
 
@@ -659,11 +661,17 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
           {rows.map((r) => (r.day ? (
             <div key={r.key} className="chat-day"><span>{r.day}</span></div>
           ) : (
-            <Bubble key={r.key} m={r.m} first={r.first} mine={r.m.from === me} name={name} me={me}
+            <Bubble key={r.key} m={r.m} first={r.first} last={r.last} mine={r.m.from === me} name={name} me={me}
+              who={r.m.from === me ? { email: me, displayName: user.displayName, photoURL: user.photoURL || '' } : { email: other, displayName: name, photoURL: person?.photoURL || '' }}
               tick={tickState(r.m, theirDelivered, theirRead)} q={finding ? fq : ''} current={current === r.m.id}
               onMenu={(x, y) => setMenu({ id: r.m.id, x, y })} onReply={() => startReply(r.m)} onJump={jump} />
           )))}
-          {typing && <div className="cm cm-theirs cm-first"><div className="cm-b cm-typing" aria-label={`${name} is typing`}><i /><i /><i /></div></div>}
+          {/* their typing: a status marker under the last message, the words shimmering */}
+          {typing && (
+            <div className="chat-typing" role="status">
+              <span className="chat-typing-t"><b>{name}</b> is typing…</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -730,7 +738,7 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
 
 // One message. Long-press (phones) or the ⌄ (computers) for Reply / Copy / Edit / Delete; swipe right to reply.
 // q: the in-chat search (matches highlighted) · current: the match being shown
-function Bubble({ m, first, mine, name, me, tick, q, current, onMenu, onReply, onJump }) {
+function Bubble({ m, first, last, mine, name, me, who, tick, q, current, onMenu, onReply, onJump }) {
   const d = toDate(m.createdAt);
   const press = useRef(null);
   const [dx, setDx] = useState(0);
@@ -758,33 +766,44 @@ function Bubble({ m, first, mine, name, me, tick, q, current, onMenu, onReply, o
     setDx(0);
   };
 
+  // [avatar] [bubble / footer], mine on the right with my avatar on the outside; one avatar and one footer per group
+  const showFoot = last || m.pending || (m.editedAt && !m.deleted);
   return (
-    <div id={`m-${m.id}`} className={['cm', mine ? 'cm-mine' : 'cm-theirs', first && 'cm-first', current && 'cm-current'].filter(Boolean).join(' ')}>
-      <div className={['cm-b', big && 'cm-big', m.deleted && 'cm-deleted'].filter(Boolean).join(' ')}
-        style={dx ? { transform: `translateX(${dx}px)` } : undefined}
-        onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-        onContextMenu={(e) => { e.preventDefault(); onMenu(e.clientX, e.clientY); }}>
-        {m.reply && !m.deleted && (
-          <button type="button" className="cm-quote" onClick={() => onJump(m.reply.id)}>
-            <b>{m.reply.from === me ? 'You' : name}</b>
-            <span>{m.reply.text}</span>
-          </button>
-        )}
-        {m.deleted ? (
-          <span className="cm-t">🚫 {mine ? 'You deleted this message' : 'This message was deleted'}</span>
-        ) : (
-          <span className="cm-t">{hit ? <Hl text={m.text} q={q} /> : <Linked text={m.text} />}</span>
-        )}
-        <span className="cm-meta">
-          {m.editedAt && !m.deleted && <em>edited</em>}
-          {clock(d)}
-          {mine && !m.deleted && <Ticks state={tick} />}
-        </span>
-        {!m.deleted && (
-          <button type="button" className="cm-more" aria-label="Message options"
-            onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); onMenu(r.left, r.bottom + 4); }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-          </button>
+    <div id={`m-${m.id}`}
+      className={['cm', mine ? 'cm-mine' : 'cm-theirs', first && 'cm-first', last && 'cm-last', current && 'cm-current'].filter(Boolean).join(' ')}>
+      <div className="cm-av">{last && <Avatar person={who} size={28} title={false} />}</div>
+      <div className="cm-col">
+        <div className={['cm-b', big && 'cm-big', m.deleted && 'cm-deleted'].filter(Boolean).join(' ')}
+          title={clock(d)}
+          style={dx ? { transform: `translateX(${dx}px)` } : undefined}
+          onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
+          onContextMenu={(e) => { e.preventDefault(); onMenu(e.clientX, e.clientY); }}>
+          {m.reply && !m.deleted && (
+            <button type="button" className="cm-quote" onClick={() => onJump(m.reply.id)}>
+              <b>{m.reply.from === me ? 'You' : name}</b>
+              <span>{m.reply.text}</span>
+            </button>
+          )}
+          {m.deleted ? (
+            <span className="cm-t">🚫 {mine ? 'You deleted this message' : 'This message was deleted'}</span>
+          ) : (
+            <span className="cm-t">{hit ? <Hl text={m.text} q={q} /> : <Linked text={m.text} />}</span>
+          )}
+          {!m.deleted && (
+            <button type="button" className="cm-more" aria-label="Message options"
+              onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); onMenu(r.left, r.bottom + 4); }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+            </button>
+          )}
+        </div>
+        {/* the footer under the bubble: edited · time · ticks (mine) */}
+        {showFoot && (
+          <div className="cm-meta">
+            {m.editedAt && !m.deleted && <em>Edited ·</em>}
+            {mine && !m.deleted && tick !== 'pending' && <span>{TICK_LABEL[tick]} ·</span>}
+            {m.pending ? 'Sending…' : clock(d)}
+            {mine && !m.deleted && <Ticks state={tick} />}
+          </div>
         )}
       </div>
     </div>
