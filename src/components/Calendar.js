@@ -9,7 +9,7 @@ import {
 import { friendlyError } from '@/lib/firebase';
 import { useHolidayCountries, useHolidayCountry, useHolidays } from '@/lib/holidays';
 import { canWrite } from '@/lib/permissions';
-import { colorFor, initials, shownName, toDate } from '@/lib/people';
+import { badgeOf, colorFor, shownName, toDate } from '@/lib/people';
 import { ShareCalendarButton, ShareCalendarDialog, SharedCalendarsBar } from './CalendarShare';
 import DaySheet from './DaySheet';
 import DuePicker from './DuePicker';
@@ -619,7 +619,7 @@ function Chip({ entry, today, ...props }) {
       )}
       {t.start && <span className="chip-time">{time12(t.start)}</span>}
       <span className="chip-t">{t.text}</span>
-      <span className="chip-av" style={{ background: colorFor(by) }} title={`Added by ${by}`}>{initials(by)}</span>
+      <span className="chip-av" style={{ background: colorFor(by) }} title={`Added by ${by}`}>{badgeOf(by, t.createdBy)}</span>
     </button>
   );
 }

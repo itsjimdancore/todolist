@@ -28,6 +28,17 @@ export function initials(name = '') {
     .toUpperCase() || '?';
 }
 
+// What goes on someone's round badge: the first letter of the nickname I gave my partner (an emoji counts as one
+// letter), otherwise their initials. key: their email or uid.
+export function badgeOf(name, key) {
+  const n = nickOf(key).trim();
+  if (!n) return initials(name);
+  const first = typeof Intl !== 'undefined' && Intl.Segmenter
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(n)[Symbol.iterator]().next().value?.segment
+    : [...n][0];
+  return (first || '?').toUpperCase();
+}
+
 // Stable colour per person, so they look the same everywhere
 // (null too: music notifications have no list)
 export function colorFor(key) {
@@ -48,7 +59,7 @@ export function Avatar({ person, size = 28, title = true }) {
       title={title ? name : undefined}
       style={{ background: colorFor(person?.email || name), width: size, height: size, fontSize: size * 0.38 }}
     >
-      {initials(name)}
+      {badgeOf(name, person?.email)}
       {photo && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={photo} alt="" referrerPolicy="no-referrer" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />

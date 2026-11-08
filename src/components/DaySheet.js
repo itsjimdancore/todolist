@@ -5,7 +5,7 @@ import { DEFAULT_MINS, dueLabel, fromKey, monthLabel, isOverdue, timeRange, toda
 import { friendlyError } from '@/lib/firebase';
 import { hostOf, linkLabel, normalizeUrl } from '@/lib/links';
 import { canWrite } from '@/lib/permissions';
-import { colorFor, initials, shownName } from '@/lib/people';
+import { badgeOf, colorFor, initials, shownName } from '@/lib/people';
 import DuePicker from './DuePicker';
 import { Spinner } from './Loading';
 import Select, { inDropdown } from './Select';
@@ -131,7 +131,7 @@ function Row({ n, entry, actions, confirming, setConfirm }) {
         <span className="ds-time">{t.due ? (t.start ? timeRange(t.start, t.mins) : 'All day') : ''}</span>
       </div>
       <div className="ds-cell ds-by" data-label="Added by">
-        <span className="chip-av" style={{ background: colorFor(by) }} aria-hidden="true">{initials(by)}</span>
+        <span className="chip-av" style={{ background: colorFor(by) }} aria-hidden="true">{badgeOf(by, t.createdBy)}</span>
         <span>{by}</span>
       </div>
       <div className="ds-cell" data-label="Status">
