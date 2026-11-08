@@ -9,7 +9,7 @@ import {
 import { friendlyError } from '@/lib/firebase';
 import { useHolidayCountries, useHolidayCountry, useHolidays } from '@/lib/holidays';
 import { canWrite } from '@/lib/permissions';
-import { colorFor, initials, toDate } from '@/lib/people';
+import { colorFor, initials, shownName, toDate } from '@/lib/people';
 import { ShareCalendarButton, ShareCalendarDialog, SharedCalendarsBar } from './CalendarShare';
 import DaySheet from './DaySheet';
 import DuePicker from './DuePicker';
@@ -608,7 +608,7 @@ function rangeTitle(a, b) {
 function Chip({ entry, today, ...props }) {
   const { t, l } = entry;
   const late = !t.done && t.due < today;
-  const by = t.createdByName || 'Someone';
+  const by = shownName(t.createdByName, t.createdBy) || 'Someone';
   return (
     <button type="button" className={['chip', t.done && 'done', late && 'late', canWrite(l.role) && 'can-drag'].filter(Boolean).join(' ')}
       title={`${t.start ? `${timeRange(t.start, t.mins)} · ` : ''}${t.text} · ${l.title}${late ? ' · overdue' : ''}`} {...props}>

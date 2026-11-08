@@ -5,7 +5,7 @@ import { DEFAULT_MINS, dueLabel, fromKey, monthLabel, isOverdue, timeRange, toda
 import { friendlyError } from '@/lib/firebase';
 import { hostOf, linkLabel, normalizeUrl } from '@/lib/links';
 import { canWrite } from '@/lib/permissions';
-import { colorFor, initials } from '@/lib/people';
+import { colorFor, initials, shownName } from '@/lib/people';
 import DuePicker from './DuePicker';
 import { Spinner } from './Loading';
 import Select, { inDropdown } from './Select';
@@ -106,7 +106,7 @@ export default function DaySheet({ day, items, holiday, lists, user, actions, in
 function Row({ n, entry, actions, confirming, setConfirm }) {
   const { t, l } = entry;
   const write = canWrite(l.role);
-  const by = t.createdByName || 'Someone';
+  const by = shownName(t.createdByName, t.createdBy) || 'Someone';
   const late = isOverdue(t);
   const status = t.done ? 'done' : late ? 'late' : 'open';
   const statusLabel = { done: 'Done', late: 'Overdue', open: 'Open' }[status];

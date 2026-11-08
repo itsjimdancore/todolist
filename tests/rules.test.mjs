@@ -303,6 +303,24 @@ describe('profiles and invitations', () => {
     assertSucceeds(setDoc(doc(as('reader'), 'users', 'reader'), { favorites: arrayUnion(LIST), updatedAt: serverTimestamp() }, { merge: true })));
   test('save your own list order', () =>
     assertSucceeds(setDoc(doc(as('reader'), 'users', 'reader'), { listOrder: [LIST, 'other'], updatedAt: serverTimestamp() }, { merge: true })));
+  test('choose your own name', () =>
+    assertSucceeds(setDoc(doc(as('reader'), 'users', 'reader'), { name: 'R'.repeat(60), updatedAt: serverTimestamp() }, { merge: true })));
+  test('go back to your account name', async () => {
+    await assertSucceeds(setDoc(doc(as('reader'), 'users', 'reader'), { name: 'Rae' }, { merge: true }));
+    await assertSucceeds(setDoc(doc(as('reader'), 'users', 'reader'), { name: deleteField() }, { merge: true }));
+  });
+  test('a chosen name is at most 60 characters', () =>
+    assertFails(setDoc(doc(as('reader'), 'users', 'reader'), { name: 'R'.repeat(61) }, { merge: true })));
+  test('a chosen name must be text', () =>
+    assertFails(setDoc(doc(as('reader'), 'users', 'reader'), { name: 42 }, { merge: true })));
+  test("cannot choose someone else's name", () =>
+    assertFails(setDoc(doc(as('stranger'), 'users', 'reader'), { name: 'Hacked' }, { merge: true })));
+  test('save a nickname for your partner', () =>
+    assertSucceeds(setDoc(doc(as('reader'), 'users', 'reader'), { nick: { email: 'rw@test.com', name: 'Sunshine' } }, { merge: true })));
+  test('a nickname is at most 60 characters', () =>
+    assertFails(setDoc(doc(as('reader'), 'users', 'reader'), { nick: { email: 'rw@test.com', name: 'S'.repeat(61) } }, { merge: true })));
+  test('a nickname has only an email and a name', () =>
+    assertFails(setDoc(doc(as('reader'), 'users', 'reader'), { nick: { email: 'rw@test.com', name: 'Sun', extra: 1 } }, { merge: true })));
   test('list order must be a list', () =>
     assertFails(setDoc(doc(as('reader'), 'users', 'reader'), { listOrder: 'nope' }, { merge: true })));
   test('save your own Spotify player link', () =>

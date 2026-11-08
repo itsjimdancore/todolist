@@ -27,14 +27,21 @@ import {
   watchOwnedLists,
   watchSharedLists,
   markListKinds,
+  MAX_NAME,
+  nameOf,
+  saveMyName,
+  setChosenName,
+  watchMyName,
   watchMusic,
+  saveNick,
+  watchNick,
   watchPartnerLists,
   watchSpotify,
 } from '@/lib/data';
 import { usePartner } from '@/lib/partner';
 import { roleLabel } from '@/lib/permissions';
 import { pausePush, refreshPush } from '@/lib/push';
-import { Avatar, colorFor, displayName, toDate } from '@/lib/people';
+import { Avatar, colorFor, displayName, nickOf, setNickname, toDate } from '@/lib/people';
 import Board from './Board';
 import Unplaced from './Unplaced';
 import Chat from './Chat';
@@ -122,6 +129,22 @@ function WorkspaceInner({ user }) {
     saveProfile(user).catch(() => {});
   }, [user]);
 
+  // ---- the name I chose (users/{uid}.name, apart from the sign-in account's): everything I write from now on
+  //      carries it (nameOf), and the card other people see follows it
+  const [myName, setMyName] = useState(null); // null until loaded
+  useEffect(() => watchMyName(user.uid, (n) => { setChosenName(user.uid, n); setMyName(n); }), [user.uid]);
+  useEffect(() => { if (myName !== null) savePresence(user).catch(() => {}); }, [myName, user]);
+  const myDisplay = myName ? nameOf(user) : user.displayName || email.split('@')[0];
+  async function renameMe(v) {
+    try {
+      const saved = await saveMyName(user, v);
+      setMyName(saved);
+      toast(saved ? 'Name updated' : 'Back to your account name');
+    } catch (e) {
+      toast(`Name not saved: ${friendlyError(e)}`, 'err');
+    }
+  }
+
   // ---- "last active" for the people I share with: on opening the app, on coming back to it, every 5 minutes
   //      while it's on screen, and once more when I leave it (switch tab, close it, lock the phone), so the time
   //      people see is when I actually stopped. Signing out saves it too (onSignOut).
@@ -184,7 +207,7 @@ function WorkspaceInner({ user }) {
   // ---- my own activity ("You created …", "You added a song …"), shown with the rest
   const [log, setLog] = useState([]);
   useEffect(() => watchLog(user.uid, setLog), [user.uid]);
-  const me = useMemo(() => ({ email, displayName: user.displayName }), [email, user.displayName]);
+  const me = useMemo(() => ({ email, displayName: myDisplay }), [email, myDisplay]);
 
   // ---- my favourite lists (stored on my profile, so they follow me to any device)
   useEffect(() => watchFavorites(user.uid, setFavList), [user.uid]);
@@ -221,8 +244,26 @@ function WorkspaceInner({ user }) {
     setPartnerLog([]);
     return partnerUid ? watchLog(partnerUid, setPartnerLog) : undefined;
   }, [partnerUid]);
+  // ---- nicknames: the one I saved my partner under (shown everywhere they appear, through displayName/shownName),
+  //      and the one they saved me under (shown to me on the Partner page)
+  const [myNick, setMyNick] = useState(null);
+  useEffect(() => watchNick(user.uid, setMyNick), [user.uid]);
+  const [theirNick, setTheirNick] = useState(null);
+  useEffect(() => {
+    setTheirNick(null);
+    return partnerUid ? watchNick(partnerUid, setTheirNick) : undefined;
+  }, [partnerUid]);
+  const nickName = partner && myNick?.email === partner.email ? myNick.name : '';
+  setNickname(nickName ? partner.email : '', nickName ? partner.uid : '', nickName); // before anything below renders a name
+  const partnerApiNick = useMemo(() => ({
+    mine: nickName,
+    theirs: theirNick && theirNick.email === email ? theirNick.name : '',
+    save: (v) => saveNick(user, partner.email, v),
+  }), [nickName, theirNick, email, user, partner]);
+
   const partnerPerson = useMemo(() => (partner ? { email: partner.email, displayName: partner.name } : null), [partner]);
-  const partnerFirst = partner ? displayName(partnerPerson).split(' ')[0] : '';
+  // a nickname is said whole ("My Love's lists"); a real name by its first word
+  const partnerFirst = partner ? nickName || displayName(partnerPerson).split(' ')[0] : '';
 
   const lists = useMemo(() => {
     // wait for both, so "where I left off" can be a list someone shared with me
@@ -443,7 +484,7 @@ function WorkspaceInner({ user }) {
   const mineIds = new Set((lists || []).map((l) => l.id));
   const sharedCalLists = calsWithMe.flatMap(({ share, lists: ls }) => ls
     .filter((l) => !l.archived && !mineIds.has(l.id))
-    .map((l) => ({ ...l, role: 'write', calOwner: (share.ownerName || share.ownerEmail).split(' ')[0], calOwnerUid: share.ownerUid })));
+    .map((l) => ({ ...l, role: 'write', calOwner: nickOf(share.ownerEmail) || (share.ownerName || share.ownerEmail).split(' ')[0], calOwnerUid: share.ownerUid })));
   const calLists = [...openLists, ...unplacedAll, ...sharedCalLists];
   // every list's tasks (archived too, so My List can search them); the calendar only uses the open lists'
   const allTasks = useAllTasks([...arranged, ...unplacedAll, ...sharedCalLists]);
@@ -592,9 +633,9 @@ function WorkspaceInner({ user }) {
             icon={<Icon name="music" />} />
 
           <div className="me">
-            <Avatar person={{ email, displayName: user.displayName }} size={32} />
+            <Avatar person={{ email, displayName: myDisplay }} size={32} />
             <div className="me-txt">
-              <div className="me-name">{user.displayName || email.split('@')[0]}</div>
+              <MyName name={myDisplay} chosen={myName || ''} accountName={user.displayName || email.split('@')[0]} onSave={renameMe} />
               <div className="me-email">{user.email}</div>
             </div>
             <button className="side-btn signout" type="button" onClick={onSignOut} aria-label="Sign out" title="Sign out">
@@ -618,7 +659,7 @@ function WorkspaceInner({ user }) {
           <Music user={user} music={music} nowPlaying={nowPlaying || ''}
             partner={partner ? { name: partnerFirst, music: partnerMusic } : null} />
         ) : view === 'partner' ? (
-          <Partner user={user} api={partnerApi} contacts={contacts} />
+          <Partner user={user} api={partnerApi} contacts={contacts} nick={partnerApiNick} />
         ) : view === 'letters' ? (
           <Letters letters={letters} contacts={contacts} favorites={favorites} actions={actions} onOpen={pick} me={email}
             onNew={() => setCreating('letter')} />
@@ -698,6 +739,40 @@ function ListGroup({ title, lists, activeId, onPick, favorites, actions, empty }
   );
 }
 
+// My name in the sidebar card: tap it (or the pencil) to change it, Enter or leaving the box saves, Esc cancels.
+// Empty goes back to the sign-in account's name.
+function MyName({ name, chosen, accountName, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState('');
+  const done = useRef(false);
+  const start = () => { done.current = false; setV(chosen || name); setEditing(true); };
+  const finish = (save) => {
+    if (done.current) return;
+    done.current = true;
+    setEditing(false);
+    const next = v.replace(/s+/g, ' ').trim();
+    if (save && next !== (chosen || '') && !(next === accountName && !chosen)) onSave(next === accountName ? '' : next);
+  };
+  if (editing) {
+    return (
+      <input className="me-name-in" autoFocus value={v} maxLength={MAX_NAME} aria-label="Your name"
+        placeholder={`Empty uses ${accountName}`}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={() => finish(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+          if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+        }} />
+    );
+  }
+  return (
+    <button type="button" className="me-name" onClick={start} title="Change your name" aria-label={`${name}. Change your name`}>
+      <span>{name}</span><Icon name="pencil" />
+    </button>
+  );
+}
+
 // Small line icons for the sidebar
 const ICONS = {
   plus: <path d="M12 5v14M5 12h14" />,
@@ -712,6 +787,7 @@ const ICONS = {
   bell: <><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></>,
   chat: <><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.1A8 8 0 1 1 20 12z" /></>,
   music: <><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></>,
+  pencil: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>,
   partner: <><circle cx="8" cy="8" r="3" /><circle cx="16" cy="8" r="3" /><path d="M2 20a6 6 0 0 1 12 0M10 20a6 6 0 0 1 12 0" /></>,
 };
 

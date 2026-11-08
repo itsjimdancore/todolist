@@ -3,8 +3,8 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { createPortal } from 'react-dom';
 import { ArrowUp, Copy, Ellipsis, Heart, MessageCircle, Pencil, Reply, Trash2 } from 'lucide-react';
 import { friendlyError } from '@/lib/firebase';
-import { addComment, deleteComment, editComment, emailOf, likeComment } from '@/lib/data';
-import { Avatar, toDate } from '@/lib/people';
+import { addComment, deleteComment, editComment, emailOf, likeComment, nameOf } from '@/lib/data';
+import { Avatar, shownName, toDate } from '@/lib/people';
 import { useDraft } from '@/lib/useDraft';
 import { commentMs } from '@/lib/useCommentsSeen';
 import { useToast } from './Toast';
@@ -32,7 +32,7 @@ const EMOJI = ['❤️', '🙌', '🔥', '👏', '😢', '😍', '😮', '😂']
 // The list page narrower than this shows Tasks | Comments as tabs (globals.css, @container lv) and the write box
 // switches to the phone one (emoji row, Post)
 const COMPACT_BELOW = 720;
-const firstName = (c) => (c.userName || c.userEmail || 'Someone').split(/[\s@]/)[0];
+const firstName = (c) => (shownName(c.userName, c.userEmail) || c.userEmail || 'Someone').split(/[\s@]/)[0];
 
 // @mentions stand out in the text
 function Text({ text }) {
@@ -333,7 +333,7 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
         {EMOJI.map((em) => <button key={em} type="button" onClick={() => addEmoji(em)} aria-label={`Add ${em}`}>{em}</button>)}
       </div>
       <div className="ig-compose">
-        <Avatar person={{ email: me, displayName: user.displayName }} size={34} />
+        <Avatar person={{ email: me, displayName: nameOf(user) }} size={34} />
         <div className="ig-input">
           <textarea
             id="comment-text"
@@ -391,7 +391,7 @@ export default function Comments({ list, comments, user, isOwner, hint, seen = n
                   {last && <Avatar person={{ email: c.userEmail, displayName: c.userName }} size={28} />}
                 </div>
                 <div className="c-col">
-                  {!cont && !mine && <div className="nm"><b>{c.userName || c.userEmail}</b></div>}
+                  {!cont && !mine && <div className="nm"><b>{shownName(c.userName, c.userEmail) || c.userEmail}</b></div>}
 
                   {isEditing ? (
                     <>

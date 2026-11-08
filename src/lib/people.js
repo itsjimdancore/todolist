@@ -1,8 +1,20 @@
 const COLORS = ['#0f6b5f', '#6a4bc4', '#b4531e', '#2b6cb0', '#a3336d', '#5a7a1f', '#8a5a00', '#4a5a8a'];
 
+// The nickname I saved my partner under (users/{uid}.nick, set on the Partner page). Workspace keeps it here so
+// everywhere that shows them says it instead: "Sunshine's lists", "By Sunshine", the avatars, the chat.
+// Matched by email, or by uid where only that was stored (who created a task).
+let nick = { email: '', uid: '', name: '' };
+export function setNickname(email = '', uid = '', name = '') {
+  nick = name ? { email: email.toLowerCase(), uid, name } : { email: '', uid: '', name: '' };
+}
+export const nickOf = (key) =>
+  (nick.name && key && (key === nick.uid || String(key).toLowerCase() === nick.email) ? nick.name : '');
+// a name saved on something (a task, a comment, a list), unless it's my partner's and I've given them a nickname
+export const shownName = (name, key) => nickOf(key) || name;
+
 export function displayName(person) {
   if (!person) return 'Someone';
-  return person.displayName || person.email || 'Someone';
+  return nickOf(person.email) || person.displayName || person.email || 'Someone';
 }
 
 export function initials(name = '') {

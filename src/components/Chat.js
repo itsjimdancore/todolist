@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  MAX_MESSAGE, deleteMessage, editMessage, emailOf, markChatRead, sendMessage, setTyping, startChat, watchPerson,
+  MAX_MESSAGE, deleteMessage, editMessage, emailOf, markChatRead, nameOf, sendMessage, setTyping, startChat, watchPerson,
 } from '@/lib/data';
 import { friendlyError } from '@/lib/firebase';
 import { EMAIL_RE, roleLabel } from '@/lib/permissions';
-import { Avatar, colorFor, displayName, toDate } from '@/lib/people';
+import { Avatar, colorFor, displayName, nickOf, toDate } from '@/lib/people';
 import BackLink from './BackLink';
 import EmojiPicker from './EmojiPicker';
 import Loading, { Spinner } from './Loading';
@@ -186,7 +186,7 @@ export default function Chat({ api, user, contacts, back, lists = [], onOpenList
   if (api.chat === undefined) return <div className="chat-page"><Loading variant="page" hint="Opening your chat" /></div>;
   if (!api.chat) return <StartChat user={user} contacts={contacts} back={back} />;
 
-  const name = api.chat.names?.[other] || person?.displayName || (other || '').split('@')[0];
+  const name = nickOf(other) || api.chat.names?.[other] || person?.displayName || (other || '').split('@')[0];
   const markRead = () => (api.unread ? markChatRead(api.chatId, user).then(() => toast('Marked as read')).catch(() => {}) : toast('No unread messages', 'info'));
   const listEl = (
     <ChatList api={api} user={user} person={person} name={name} active={wide && selected}
@@ -662,7 +662,7 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
             <div key={r.key} className="chat-day"><span>{r.day}</span></div>
           ) : (
             <Bubble key={r.key} m={r.m} first={r.first} last={r.last} mine={r.m.from === me} name={name} me={me}
-              who={r.m.from === me ? { email: me, displayName: user.displayName, photoURL: user.photoURL || '' } : { email: other, displayName: name, photoURL: person?.photoURL || '' }}
+              who={r.m.from === me ? { email: me, displayName: nameOf(user), photoURL: user.photoURL || '' } : { email: other, displayName: name, photoURL: person?.photoURL || '' }}
               tick={tickState(r.m, theirDelivered, theirRead)} q={finding ? fq : ''} current={current === r.m.id}
               onMenu={(x, y) => setMenu({ id: r.m.id, x, y })} onReply={() => startReply(r.m)} onJump={jump} />
           )))}

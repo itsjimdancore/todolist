@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { linkLabel } from '@/lib/links';
 import { roleLabel } from '@/lib/permissions';
-import { Avatar, colorFor, timeAgo } from '@/lib/people';
+import { Avatar, colorFor, shownName, timeAgo } from '@/lib/people';
 import ListMenu from './ListMenu';
 import Loading from './Loading';
 
@@ -231,7 +231,7 @@ function BoardCard({ list, tasks = null, favorite, actions, onOpen, dragging, gr
       </div>
 
       <div className="bcard-meta">
-        {list.role === 'owner' ? 'Owned by you' : `By ${list.ownerName || list.ownerEmail}`}
+        {list.role === 'owner' ? 'Owned by you' : `By ${shownName(list.ownerName, list.ownerEmail) || list.ownerEmail}`}
         {list.role !== 'owner' && <span className={`pill ${list.role}`}>{roleLabel(list.role)}</span>}
         {list.archived && <span className="pill read">Archived</span>}
       </div>
@@ -324,7 +324,7 @@ function BoardSearch({ query, setQuery, q, results, onOpen }) {
               {item.task.done && ' · done'}
             </>
           ) : (
-            <>{item.list.role === 'owner' ? 'Your list' : `Shared by ${item.list.ownerName || item.list.ownerEmail}`}{item.list.archived ? ' · archived' : ''}</>
+            <>{item.list.role === 'owner' ? 'Your list' : `Shared by ${shownName(item.list.ownerName, item.list.ownerEmail) || item.list.ownerEmail}`}{item.list.archived ? ' · archived' : ''}</>
           )}
         </span>
       </span>

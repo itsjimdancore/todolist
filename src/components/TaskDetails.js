@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_MINS, dueLabel, fromMin, isOverdue, timeRange, toMin, todayKey } from '@/lib/dates';
-import { colorFor } from '@/lib/people';
+import { colorFor, shownName } from '@/lib/people';
 import DuePicker from './DuePicker';
 import Select from './Select';
 import TaskLinks, { LinkIcon } from './TaskLinks';
@@ -47,7 +47,7 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
         <dt>Status</dt>
         <dd>{t.archived ? 'Archived' : t.done ? 'Done' : isOverdue(t) ? <span className="late-txt">Overdue</span> : 'Open'}</dd>
         <dt>Added by</dt>
-        <dd>{t.createdByName || 'Someone'}</dd>
+        <dd>{shownName(t.createdByName, t.createdBy) || 'Someone'}</dd>
       </dl>
       {!write && <p className="cal-hint">You can view this task but not change it.</p>}
       {write && <TaskActions archived={!!t.archived} onArchive={on.archive} onDelete={on.remove} />}

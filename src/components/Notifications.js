@@ -7,7 +7,7 @@ import { addDays, dueLabel, fromKey, time12, timeRange, todayKey } from '@/lib/d
 import { friendlyError } from '@/lib/firebase';
 import { canComment, roleLabel } from '@/lib/permissions';
 import { ACT, didText, isComment, notifyCopy, who } from '@/lib/activityText';
-import { Avatar, colorFor, toDate } from '@/lib/people';
+import { Avatar, colorFor, shownName, toDate } from '@/lib/people';
 import { useToast } from './Toast';
 import { PushPrompt } from './DevicePush';
 import NotifySettings from './NotifySettings';
@@ -69,7 +69,7 @@ export function useNotifications({ invites, activity = [], log = [], me = null, 
       out.push({
         id: `share:${inv.id}`, kind: 'share', inviteId: inv.id, read: !!inv.seen, at: toDate(inv.createdAt),
         listId: list.id, listTitle: list.title, role: list.role, letter: list.kind === 'letter',
-        from: { email: inv.fromEmail, displayName: inv.fromName },
+        from: { email: inv.fromEmail, displayName: shownName(inv.fromName, inv.fromEmail) },
       });
     }
 
@@ -82,7 +82,7 @@ export function useNotifications({ invites, activity = [], log = [], me = null, 
         id: `act:${a.id}`, kind: a.kind, activityId: a.id, read: !!a.seen, at: toDate(a.createdAt),
         listId: a.listId, listTitle: list?.title || a.listTitle, role: list?.role, gone: !list,
         letter: list ? list.kind === 'letter' : !!a.letter, text: a.text || '', detail: a.detail || '',
-        from: { email: a.fromEmail, displayName: a.fromName },
+        from: { email: a.fromEmail, displayName: shownName(a.fromName, a.fromEmail) },
       });
     }
 
@@ -720,7 +720,7 @@ function Details({ n }) {
     <div className="ntp-d">
       {list}
       <span className={n.kind === 'overdue' ? 'late-txt' : ''}>Due {dueLabel(t.due).toLowerCase()}{t.start ? `, ${timeRange(t.start, t.mins)}` : ''}</span>
-      {t.createdByName && <span className="ntp-d-extra">added by {t.createdByName}</span>}
+      {t.createdByName && <span className="ntp-d-extra">added by {shownName(t.createdByName, t.createdBy)}</span>}
       {t.notes && <span className="ntp-notes" title={t.notes}>{t.notes}</span>}
     </div>
   );

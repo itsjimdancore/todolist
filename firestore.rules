@@ -11,7 +11,7 @@ rules_version = '2';
 //  so keep both apps' sections in this one file.
 //
 //  To-do data layout
-//    users/{uid}                         profile, the list you had open last, your favourite lists, your list order,
+//    users/{uid}                         profile (the name you chose, the nickname you gave your partner), the list you had open last, your favourite lists, your list order,
 //                                        your Spotify player link, the songs on your Music page
 //    people/{email}                      name, photo and when you were last active (fetched by people who know your email)
 //    users/{uid}/log/{id}              my own activity, shown to me in Notifications ("You created …")
@@ -173,7 +173,15 @@ service cloud.firestore {
       allow read: if signedIn() && (request.auth.uid == uid || isPartner(uid));
       allow delete: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['email', 'displayName', 'lastListId', 'favorites', 'listOrder', 'spotify', 'music', 'notify', 'reminders', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['email', 'displayName', 'name', 'nick', 'lastListId', 'favorites', 'listOrder', 'spotify', 'music', 'notify', 'reminders', 'createdAt', 'updatedAt'])
+        // the name I chose in the app (empty or missing: my sign-in account's name)
+        && request.resource.data.get('name', '') is string
+        && request.resource.data.get('name', '').size() <= 60
+        // the nickname I saved my partner under: { email, name } (my partner can read it: see read above)
+        && (!('nick' in request.resource.data) || (
+          request.resource.data.nick is map && request.resource.data.nick.keys().hasOnly(['email', 'name'])
+          && request.resource.data.nick.email is string && request.resource.data.nick.email.size() <= 254
+          && request.resource.data.nick.name is string && request.resource.data.nick.name.size() >= 1 && request.resource.data.nick.name.size() <= 60))
         // due / overdue reminders I've marked read or removed: { read: [ids], gone: [ids] }
         && request.resource.data.get('reminders', {}) is map
         && request.resource.data.get('reminders', {}).keys().hasOnly(['read', 'gone'])

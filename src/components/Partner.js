@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { friendlyError } from '@/lib/firebase';
-import { emailOf, nameOf } from '@/lib/data';
+import { MAX_NAME, emailOf, nameOf } from '@/lib/data';
 import { EMAIL_RE } from '@/lib/permissions';
 import { addPartner, removePartner, stopSeeing } from '@/lib/partner';
 import { appUrl } from '@/lib/appUrl';
@@ -84,7 +84,7 @@ export function PartnerPrompt({ user, api }) {
 
 // The Partner page. Works like sharing a list: add your partner by email and they see and change everything of yours
 // straight away. They add you back (one tap) to share theirs. api: usePartner(user). contacts: people to pick from.
-export default function Partner({ user, api, contacts = [] }) {
+export default function Partner({ user, api, contacts = [], nick = null }) {
   const toast = useToast();
   const me = emailOf(user);
   const [email, setEmail] = useState('');
@@ -93,7 +93,7 @@ export default function Partner({ user, api, contacts = [] }) {
   const [sure, setSure] = useState(false); // removing asks once more
   const { added, partner, both, others, loading } = api;
   const name = (p) => displayName({ email: p.email, displayName: p.name });
-  const first = (p) => name(p).split(' ')[0];
+  const first = (p) => (p === partner && nick?.mine) || name(p).split(' ')[0];
 
   const run = async (work, ok) => {
     setBusy(true);
@@ -123,8 +123,9 @@ export default function Partner({ user, api, contacts = [] }) {
             <Avatar person={{ email: partner.email, displayName: partner.name }} size={52} />
             <div className="partner-t">
               <b>{name(partner)}</b>
-              <span>{partner.email}</span>
+              <span>{nick?.mine ? `${partner.name || partner.email} · ` : ''}{partner.email}</span>
               <p>You&apos;re partners. You each see and change {WHAT}. Only the owner of a list or letter can delete, rename or share it.</p>
+              {nick && <Nicknames nick={nick} partner={partner} />}
             </div>
             <div className="partner-b">
               {sure ? (
@@ -148,8 +149,9 @@ export default function Partner({ user, api, contacts = [] }) {
                 <Avatar person={{ email: partner.email, displayName: partner.name }} size={52} />
                 <div className="partner-t">
                   <b>{name(partner)} added you as their partner</b>
-                  <span>{partner.email}</span>
+                  <span>{nick?.mine ? `${partner.name || partner.email} · ` : ''}{partner.email}</span>
                   <p>You can see and change everything of {first(partner)}&apos;s now. Add {first(partner)} back to share yours too.</p>
+                  {nick && <Nicknames nick={nick} partner={partner} />}
                 </div>
                 <div className="partner-b">
                   <button type="button" className="btn primary" disabled={busy}
@@ -228,6 +230,44 @@ export default function Partner({ user, api, contacts = [] }) {
           </section>
         )}
       </div>
+    </div>
+  );
+}
+
+// What I call my partner (they can see it), and what they call me. Saved on blur or Enter; empty removes it.
+function Nicknames({ nick, partner }) {
+  const toast = useToast();
+  const real = partner.name || partner.email.split('@')[0];
+  const [v, setV] = useState(nick.mine);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setV(nick.mine); }, [nick.mine]);
+  async function save(e) {
+    e?.preventDefault();
+    const next = v.replace(/s+/g, ' ').trim();
+    if (next === nick.mine || busy) return;
+    setBusy(true);
+    try {
+      await nick.save(next);
+      toast(next ? `Saved ${real} as ${next}` : `Nickname removed. ${real} shows by their name again.`);
+    } catch (er) {
+      setV(nick.mine);
+      toast(`Nickname not saved: ${friendlyError(er)}`, 'err');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="partner-nick">
+      <form className="partner-nick-f" onSubmit={save}>
+        <label htmlFor="partner-nick">Your nickname for {real}</label>
+        <input id="partner-nick" value={v} maxLength={MAX_NAME} placeholder={`e.g. Sunshine (empty shows ${real})`} autoComplete="off"
+          onChange={(e) => setV(e.target.value)} onBlur={() => save()}
+          onKeyDown={(e) => { if (e.key === 'Escape') setV(nick.mine); }} />
+        <span className="partner-nick-note">{real} can see what you&apos;ve saved them as.</span>
+      </form>
+      {nick.theirs && (
+        <p className="partner-nick-theirs">{real} saved you as <b>{nick.theirs}</b> 💛</p>
+      )}
     </div>
   );
 }

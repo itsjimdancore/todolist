@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { friendlyError } from '@/lib/firebase';
 import { renameList, saveLetterBody, watchComments } from '@/lib/data';
 import { PERMISSIONS, canComment, canWrite, roleLabel } from '@/lib/permissions';
-import { displayName, timeAgo } from '@/lib/people';
+import { displayName, shownName, timeAgo } from '@/lib/people';
 import PeopleStack from './PeopleStack';
 import BackLink from './BackLink';
 import { useToast } from './Toast';
@@ -81,7 +81,7 @@ export default function LetterView({ list, role, user, contacts, back, focusComm
           <div className="meta">
             {isOwner
               ? toPerson ? `A love letter to ${displayName(toPerson)}` : 'A love letter · not sent to anyone yet'
-              : `A love letter from ${list.ownerName || list.ownerEmail}`}
+              : `A love letter from ${shownName(list.ownerName, list.ownerEmail) || list.ownerEmail}`}
             {isOwner && left.length > 0 && !recipient && ` · ${left[0]} left`}
           </div>
         </div>
@@ -112,7 +112,7 @@ export default function LetterView({ list, role, user, contacts, back, focusComm
       {!isOwner && (
         <div className="banner">
           {role === 'partner' ? (
-            <>Your partner <b>{list.ownerName || list.ownerEmail}</b>&apos;s letter. You can write in it; only they can delete it or choose who it&apos;s for.</>
+            <>Your partner <b>{shownName(list.ownerName, list.ownerEmail) || list.ownerEmail}</b>&apos;s letter. You can write in it; only they can delete it or choose who it&apos;s for.</>
           ) : (
             <>You have <b>{roleLabel(role)}</b> access. {letterDesc(role)}</>
           )}

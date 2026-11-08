@@ -28,7 +28,38 @@ const commentsCol = (id) => collection(db(), 'lists', id, 'comments');
 const roleField = (email) => new FieldPath('roles', email);
 
 export const emailOf = (user) => (user.email || '').toLowerCase();
-export const nameOf = (user) => user.displayName || (user.email || '').split('@')[0];
+// The name I chose in the app (users/{uid}.name), kept apart from the sign-in account's name. Workspace loads it
+// (watchMyName → setChosenName); until then, or when it's empty, the account's name is used.
+export const MAX_NAME = 60;
+let chosen = { uid: null, name: '' };
+export function setChosenName(uid, name) { chosen = { uid, name: name || '' }; }
+export const nameOf = (user) => (chosen.uid === user.uid && chosen.name) || user.displayName || (user.email || '').split('@')[0];
+const tidyName = (name) => String(name || '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME);
+
+export function watchMyName(uid, onData) {
+  return onSnapshot(doc(db(), 'users', uid), (s) => onData(s.exists() ? s.data().name || '' : ''), () => onData(''));
+}
+
+// The nickname someone saved their partner under: users/{uid}.nick = { email, name } (or null). Mine, or my
+// partner's (they can read mine, I can read theirs: see isPartner in firestore.rules) to show "Alex saved you as …".
+export function watchNick(uid, onData) {
+  return onSnapshot(doc(db(), 'users', uid), (s) => onData((s.exists() && s.data().nick) || null), () => onData(null));
+}
+// empty name: no nickname
+export function saveNick(user, email, name) {
+  const v = tidyName(name);
+  return setDoc(doc(db(), 'users', user.uid),
+    { nick: v ? { email: email.toLowerCase(), name: v } : deleteField(), updatedAt: serverTimestamp() }, { merge: true });
+}
+
+// Empty: back to the sign-in account's name. Then the card others see (people/{email}) follows straight away.
+export async function saveMyName(user, name) {
+  const v = tidyName(name);
+  await setDoc(doc(db(), 'users', user.uid), { name: v || deleteField(), updatedAt: serverTimestamp() }, { merge: true });
+  setChosenName(user.uid, v);
+  await savePresence(user).catch(() => {});
+  return v;
+}
 
 // ---------- profile + "where I left off" ----------
 export async function saveProfile(user) {

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { timeAgo } from '@/lib/people';
+import { shownName, timeAgo } from '@/lib/people';
 import DuePicker from './DuePicker';
 import { AddLink, LinkChips } from './TaskLinks';
 import { StepLines } from './TaskDetails';
@@ -18,10 +18,10 @@ export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, on
   }
   const startEdit = () => { setText(task.text); setEditing(true); };
 
-  const by = task.createdBy === me ? 'you' : (task.createdByName || 'someone').split(/[\s@]/)[0];
+  const by = task.createdBy === me ? 'you' : (shownName(task.createdByName, task.createdBy) || 'someone').split(/[\s@]/)[0];
   const edited =
     task.updatedBy && task.updatedBy !== task.createdBy
-      ? ` · last changed by ${task.updatedBy === me ? 'you' : task.updatedByName || 'someone'}`
+      ? ` · last changed by ${task.updatedBy === me ? 'you' : shownName(task.updatedByName, task.updatedBy) || 'someone'}`
       : '';
 
   return (

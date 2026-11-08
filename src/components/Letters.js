@@ -1,6 +1,6 @@
 'use client';
 import { useId } from 'react';
-import { displayName, timeAgo } from '@/lib/people';
+import { displayName, nickOf, timeAgo } from '@/lib/people';
 import ListMenu from './ListMenu';
 
 // A small number from a letter's id, so each letter keeps the same burn and tilt every time
@@ -51,14 +51,14 @@ export default function Letters({ letters, contacts, favorites, actions, onOpen,
   const isForMe = (l) => l.role !== 'owner' && (l.role !== 'partner' || (l.memberEmails || []).includes(me));
   const forMe = open.filter(isForMe);
   const partners = open.filter((l) => l.role === 'partner' && !isForMe(l));
-  const partnerName = partners[0] ? (partners[0].ownerName || partners[0].ownerEmail).split(' ')[0] : '';
+  const partnerName = partners[0] ? nickOf(partners[0].ownerEmail) || (partners[0].ownerName || partners[0].ownerEmail).split(' ')[0] : '';
   const archived = letters.filter((l) => l.archived);
 
   const card = (l) => {
     const to = l.memberEmails?.[0];
     const who = l.role === 'owner' || (l.role === 'partner' && !isForMe(l))
       ? (to ? `To ${nameFor(to)}` : 'Not sent yet')
-      : `From ${l.ownerName || l.ownerEmail}`;
+      : `From ${nickOf(l.ownerEmail) || l.ownerName || l.ownerEmail}`;
     const preview = firstLine(l.body);
     return (
       <BurntPaper key={l.id} seed={l.id} className="letter-card" role="button" tabIndex={0}

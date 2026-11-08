@@ -330,7 +330,17 @@ button.music-next:hover b { color: var(--accent); }
 .music-hint { font-size: 12px; color: var(--muted); }
 .me { flex: none; display: flex; gap: 10px; align-items: center; padding: 10px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--sunk); }
 .me-txt { flex: 1; min-width: 0; }
-.me-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* my name: tap to change it (a pencil shows on hover or focus), then it's a box in the same place */
+.me-name { display: flex; align-items: center; gap: 6px; max-width: 100%; min-height: 22px; margin: 0; padding: 0; border: none; background: transparent;
+  color: var(--fg); font-size: 14px; font-weight: 600; text-align: left; }
+.me-name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-name .icon { flex: none; width: 13px; height: 13px; color: var(--muted); opacity: 0; transition: opacity .12s; }
+.me-name:hover .icon, .me-name:focus-visible .icon { opacity: 1; }
+@media (hover: none) { .me-name .icon { opacity: .7; } }
+.me-name-in { display: block; width: 100%; height: 26px; margin: -2px 0 0; padding: 0 8px; border: 1px solid var(--accent); border-radius: 6px;
+  background: var(--bg); font-size: 14px; font-weight: 600; box-shadow: 0 0 0 3px var(--accent-soft); }
+.me-name-in:focus-visible { outline: none; }
+@supports (-webkit-touch-callout: none) { .me-name-in { font-size: 16px; } } /* iPhone zooms in on anything smaller */
 .me-email { font-family: var(--mono); font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .me .side-btn:hover { background: var(--danger-soft); color: var(--danger); }
 .only-mobile { display: none; }
@@ -2735,6 +2745,16 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 .partner-f input { flex: 1; min-width: 0; }
 .partner-wait { padding: 10px 12px; border-radius: 10px; background: var(--sunk); font-size: 14px; }
 .partner-note { font-size: 12.5px; color: var(--muted); }
+/* the nickname I gave my partner (they can see it), and the one they gave me */
+.partner-nick { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.partner-nick-f { display: flex; flex-direction: column; gap: 5px; max-width: 360px; }
+.partner-nick-f label { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--fg); }
+.partner-nick-f input { height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.partner-nick-f input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.partner-nick-note { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.partner-t .partner-nick-theirs { margin: 0; font-size: 14px; }
+.partner-nick-theirs b { color: var(--accent); }
+@supports (-webkit-touch-callout: none) { .partner-nick-f input { font-size: 16px; } }
 .partner-sec { display: flex; flex-direction: column; gap: 10px; }
 .partner-reqs { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .partner-req { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }

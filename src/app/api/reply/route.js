@@ -46,7 +46,7 @@ export async function POST(req) {
   const who = await a.auth.getUserByEmail(pass.email).catch(() => null);
   if (!who) return fail('Sign in to the app again, then reply.', 403);
   const profile = await a.db.collection('users').doc(who.uid).get().then((s) => s.data() || {}).catch(() => ({}));
-  const name = (profile.displayName || who.displayName || pass.email.split('@')[0]).slice(0, 120);
+  const name = (profile.name || profile.displayName || who.displayName || pass.email.split('@')[0]).slice(0, 120);
 
   // not too fast (replyRate/* is only used here: the rules give the app no access to it)
   const rateRef = a.db.collection('replyRate').doc(createHash('sha1').update(`${pass.email}|${pass.listId}`).digest('hex'));
@@ -109,7 +109,7 @@ async function replyInChat(a, pass, text, origin) {
   const who = await a.auth.getUserByEmail(pass.email).catch(() => null);
   if (!who) return fail('Sign in to the app again, then reply.', 403);
   const profile = await a.db.collection('users').doc(who.uid).get().then((s) => s.data() || {}).catch(() => ({}));
-  const name = (profile.displayName || who.displayName || pass.email.split('@')[0]).slice(0, 120);
+  const name = (profile.name || profile.displayName || who.displayName || pass.email.split('@')[0]).slice(0, 120);
 
   const rateRef = a.db.collection('replyRate').doc(createHash('sha1').update(`${pass.email}|chat|${pass.chatId}`).digest('hex'));
   const allowed = await a.db.runTransaction(async (tx) => {

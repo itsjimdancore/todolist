@@ -11,6 +11,7 @@ import {
   watchTasks,
 } from '@/lib/data';
 import { PERMISSIONS, canComment, canWrite, roleLabel } from '@/lib/permissions';
+import { shownName } from '@/lib/people';
 import PeopleStack from './PeopleStack';
 import BackLink from './BackLink';
 import { byDue, dueLabel, monthLabel } from '@/lib/dates';
@@ -157,7 +158,7 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
             <h1 onDoubleClick={() => isOwner && setRenaming(true)} title={isOwner ? 'Double-click to rename' : undefined}>{list.title}</h1>
           )}
           <div className="meta">
-            {isOwner ? 'Owned by you' : `Owned by ${list.ownerName || list.ownerEmail}`} ·{' '}
+            {isOwner ? 'Owned by you' : `Owned by ${shownName(list.ownerName, list.ownerEmail) || list.ownerEmail}`} ·{' '}
             {members.length ? `shared with ${members.length} ${members.length === 1 ? 'person' : 'people'}` : 'not shared yet'}
             {isOwner && left.length > 0 && ` · ${left.length} left`}
           </div>
@@ -190,7 +191,7 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
       {!isOwner && (
         <div className="banner">
           {role === 'partner' ? (
-            <>Your partner <b>{list.ownerName || list.ownerEmail}</b>&apos;s list. You can change everything in it; only they can delete, rename or share it.</>
+            <>Your partner <b>{shownName(list.ownerName, list.ownerEmail) || list.ownerEmail}</b>&apos;s list. You can change everything in it; only they can delete, rename or share it.</>
           ) : (
             <>You have <b>{roleLabel(role)}</b> access. {PERMISSIONS[role]?.desc}</>
           )}
