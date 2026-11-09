@@ -2733,38 +2733,89 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 }
 
 /* ---------- Partner page: link up with one person to share everything ---------- */
-.partner-body { display: flex; flex-direction: column; gap: 18px; max-width: 680px; }
-.partner-card { display: flex; flex-direction: column; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
-.partner-card.linked { flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 14px; border-color: var(--accent); background: var(--accent-soft); }
+/* Goes by the page's own width (the sidebar takes a share): two columns when there's room, one under the other when not */
+.partner-wrap { container: pw / inline-size; }
+.partner-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; width: 100%; max-width: 1040px; }
+.partner-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@container pw (min-width: 760px) {
+  .partner-grid { grid-template-columns: minmax(0, 1fr) minmax(240px, 300px); gap: 20px; }
+  .partner-main { grid-column: 1; grid-row: 1; }
+  .partner-side { grid-column: 2; grid-row: 1 / span 2; position: sticky; top: 0; }
+  .partner-danger { grid-column: 1; grid-row: 2; }
+}
+.partner-card { display: flex; flex-direction: column; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); min-width: 0; }
 .partner-card p { margin: 0; }
-.partner-t { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 3px; overflow-wrap: anywhere; }
+.partner-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; overflow-wrap: anywhere; }
 .partner-t > span { font-size: 13px; color: var(--muted); }
-.partner-t p { margin-top: 6px; font-size: 14px; }
+.partner-t p { margin-top: 6px; font-size: 14px; line-height: 1.5; }
 .partner-b { display: flex; flex-wrap: wrap; gap: 8px; }
 .partner-f { display: flex; gap: 8px; }
 .partner-f input { flex: 1; min-width: 0; }
-.partner-wait { padding: 10px 12px; border-radius: 10px; background: var(--sunk); font-size: 14px; }
-.partner-note { font-size: 12.5px; color: var(--muted); }
-/* the nickname I gave my partner (they can see it), and the one they gave me */
-.partner-nick { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
-.partner-nick-f { display: flex; flex-direction: column; gap: 5px; max-width: 360px; }
-.partner-nick-f label { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--fg); }
-.partner-nick-f input { height: 38px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
-.partner-nick-f input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.partner-note { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+/* the top card: my avatar and theirs, joined, with the status pill and what to do next */
+.partner-hero { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 18px; row-gap: 14px; }
+.partner-hero.is-both, .partner-hero.is-theirs { border-color: var(--accent); background: var(--accent-soft); }
+.partner-hero > .partner-b { grid-column: 2; }
+.ph-avs { display: flex; align-items: center; }
+.ph-avs .av { box-shadow: 0 0 0 3px var(--surface); }
+.partner-hero.is-both .ph-avs .av, .partner-hero.is-theirs .ph-avs .av { box-shadow: 0 0 0 3px var(--accent-soft); }
+.ph-link { display: grid; place-items: center; width: 26px; height: 26px; margin: 0 -6px; position: relative; z-index: 1; border-radius: 50%;
+  background: var(--bg); border: 1px solid var(--line); color: var(--accent); font-size: 13px; font-weight: 700; }
+.partner-hero.is-waiting .ph-avs .av:last-child { opacity: .55; }
+.ph-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.ph-top b { font-size: 17px; overflow-wrap: anywhere; }
+.ph-pill { padding: 2px 9px; border-radius: 999px; font-family: var(--mono); font-size: 11px; font-weight: 600; white-space: nowrap;
+  background: var(--sunk); color: var(--muted); }
+.ph-pill.is-both { background: var(--ok-soft); color: var(--ok); }
+.ph-pill.is-theirs { background: var(--surface); color: var(--accent); }
+
+/* "What you share": a short checklist instead of a long sentence */
+.partner-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+@container pw (min-width: 760px) { .partner-list { grid-template-columns: minmax(0, 1fr); } }
+.partner-list li { display: flex; align-items: center; gap: 8px; }
+.partner-tick { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700; }
+
+/* the nickname I gave my partner (they can see it), and the one they gave me: label on the left, value on the right */
+.partner-nick { gap: 14px; }
+.partner-nick-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: start; gap: 6px 14px; }
+.partner-nick-row label, .partner-nick-k { padding-top: 10px; font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--fg); overflow-wrap: anywhere; }
+.partner-nick-row + .partner-nick-row { padding-top: 14px; border-top: 1px solid var(--line); }
+.partner-nick-v { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding-top: 0; }
+.partner-nick-row:last-child .partner-nick-v { padding-top: 9px; font-size: 14px; }
+.partner-nick-v input { height: 38px; max-width: 360px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.partner-nick-v input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .partner-nick-note { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
-.partner-t .partner-nick-theirs { margin: 0; font-size: 14px; }
-.partner-nick-theirs b { color: var(--accent); }
-@supports (-webkit-touch-callout: none) { .partner-nick-f input { font-size: 16px; } }
+.partner-nick-theirs { color: var(--accent); }
+@supports (-webkit-touch-callout: none) { .partner-nick-v input { font-size: 16px; } }
+
+/* people who added me, beyond my partner */
 .partner-sec { display: flex; flex-direction: column; gap: 10px; }
 .partner-reqs { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .partner-req { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-@media (max-width: 560px) {
-  .partner-card { padding: 14px; }
-  .partner-card.linked .partner-b, .partner-req .partner-b { width: 100%; }
-  .partner-b .btn { flex: 1; height: 44px; }
+
+/* the ways out, apart from everything else */
+.partner-danger { display: flex; flex-direction: column; border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line)); border-radius: 14px; }
+.partner-rm { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 14px 18px; }
+.partner-rm + .partner-rm { border-top: 1px solid var(--line); }
+.partner-rm p { flex: 1 1 260px; margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+
+/* phones: avatars on top and centred, buttons full width and easy to tap */
+@container pw (max-width: 520px) {
+  .partner-card { padding: 16px; }
+  .partner-hero { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; }
+  .partner-hero .partner-t { align-items: center; }
+  .partner-hero .ph-top { justify-content: center; }
+  .partner-hero > .partner-b { grid-column: 1; width: 100%; }
+  .partner-b { width: 100%; }
+  .partner-b .btn { flex: 1; height: 44px; justify-content: center; }
   .partner-f { flex-direction: column; }
   .partner-f input { height: 44px; font-size: 16px; }
   .partner-f .btn { height: 44px; }
+  .partner-nick-row { grid-template-columns: minmax(0, 1fr); }
+  .partner-nick-row label, .partner-nick-k, .partner-nick-row:last-child .partner-nick-v { padding-top: 0; }
+  .partner-nick-v input { max-width: none; height: 44px; }
+  .partner-rm { padding: 14px 16px; }
 }
 /* "X added you as their partner": share mine back in one tap */
 .partner-prompt .m-b { display: flex; flex-direction: column; gap: 10px; }
