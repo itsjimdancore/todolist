@@ -627,6 +627,64 @@ describe('chat messages', () => {
     await seed('m4', 0, 'reader');
     await assertFails(edit(msg('m4')));
   });
+
+  describe('voice notes', () => {
+    const audio = (over = {}) => ({ data: 'AAAA', mime: 'audio/webm', duration: 3, ...over });
+    const voice = (over = {}, audioOver = {}) => ({
+      from: people.writer.email, text: '', audio: audio(audioOver), createdAt: serverTimestamp(), ...over,
+    });
+    const seedVoice = (id) => env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'chats', CHAT), { members: [people.writer.email, people.reader.email] });
+      await setDoc(doc(db, 'chats', CHAT, 'messages', id),
+        { from: people.writer.email, text: '', audio: audio(), createdAt: Timestamp.fromMillis(Date.now() - 60000) });
+    });
+
+    test('can send a voice note (no text, a valid audio map)', async () => {
+      await seed('seed', 1);
+      await assertSucceeds(setDoc(msg('v1'), voice()));
+    });
+    test('can answer a message with a voice note', async () => {
+      await seed('seed', 1);
+      await assertSucceeds(setDoc(msg('v2'), voice({ reply: { id: 'seed', text: 'hi', from: people.reader.email } })));
+    });
+    test('a message with neither text nor audio is refused', async () => {
+      await seed('seed', 1);
+      await assertFails(setDoc(msg('v3'), { from: people.writer.email, text: '', createdAt: serverTimestamp() }));
+    });
+    test('the audio is checked', async () => {
+      await seed('seed', 1);
+      await assertFails(setDoc(msg('v4'), voice({}, { url: 'https://example.com/a.webm' }))); // an extra key
+      await assertFails(setDoc(msg('v5'), voice({}, { duration: 999 })));
+      await assertFails(setDoc(msg('v6'), voice({}, { duration: 0 })));
+      await assertFails(setDoc(msg('v7'), voice({}, { duration: '3' })));
+      await assertFails(setDoc(msg('v8'), voice({}, { data: '' })));
+      await assertFails(setDoc(msg('v9'), voice({}, { data: 'a'.repeat(700001) })));
+      await assertFails(setDoc(msg('v10'), voice({}, { mime: 'x'.repeat(81) })));
+      await assertFails(setDoc(msg('v11'), voice({ audio: 'AAAA' })));
+    });
+    test('the biggest allowed note still fits', async () => {
+      await seed('seed', 1);
+      await assertSucceeds(setDoc(msg('v12'), voice({}, { data: 'a'.repeat(700000), duration: 91 })));
+    });
+    test('cannot send one as someone else', async () => {
+      await seed('seed', 1);
+      await assertFails(setDoc(msg('v13'), voice({ from: people.reader.email })));
+    });
+    test('a voice note cannot be edited into text', async () => {
+      await seedVoice('v14');
+      await assertFails(edit(msg('v14')));
+    });
+    test('delete for everyone must remove the audio', async () => {
+      await seedVoice('v15');
+      await assertFails(updateDoc(msg('v15'), { text: '', deleted: true }));
+      await assertSucceeds(updateDoc(msg('v15'), { text: '', deleted: true, audio: deleteField() }));
+    });
+    test('a text message still deletes the way it did', async () => {
+      await seed('v16', 1);
+      await assertSucceeds(updateDoc(msg('v16'), { text: '', deleted: true, audio: deleteField() }));
+    });
+  });
 });
 
 describe('partners', () => {

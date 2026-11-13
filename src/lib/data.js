@@ -366,6 +366,12 @@ export const chatIdFor = (a, b) => [a, b].map((e) => String(e).trim().toLowerCas
 const chatRef = (id) => doc(db(), 'chats', id);
 const msgsCol = (id) => collection(db(), 'chats', id, 'messages');
 export const MAX_MESSAGE = 4000;
+// voice notes: recorded at ~32 kbps mono and stored base64 inside the message document,
+// so a chat page downloads its audio with the snapshot. The caps keep the doc far under
+// Firestore's 1 MiB limit; firestore.rules enforces the same base64 size.
+export const MAX_VOICE_SECS = 90;
+export const MAX_VOICE_B64 = 700000;
+export const VOICE_PREVIEW = '🎤 Voice message';
 
 // my chats (live). The app uses the one private chat: the first.
 export function watchMyChats(email, onData, onError) {
@@ -406,6 +412,23 @@ export async function sendMessage(chatId, user, text, reply = null) {
   return ref.id;
 }
 
+// a voice note: audio = { data: base64 (no "data:" prefix), mime, duration (seconds) }
+export async function sendVoiceNote(chatId, user, audio, reply = null) {
+  const me = emailOf(user);
+  const ref = doc(msgsCol(chatId));
+  const b = writeBatch(db());
+  b.set(ref, { from: me, text: '', audio, createdAt: serverTimestamp(), ...(reply ? { reply } : {}) });
+  b.update(chatRef(chatId),
+    'last', { text: VOICE_PREVIEW, from: me, at: serverTimestamp() },
+    new FieldPath('readAt', me), serverTimestamp(),
+    new FieldPath('deliveredAt', me), serverTimestamp(),
+    new FieldPath('typing', me), deleteField(),
+    new FieldPath('names', me), nameOf(user).slice(0, 120));
+  await b.commit();
+  pushChat(chatId, ref.id);
+  return ref.id;
+}
+
 // a device notification for the other person (and a reply box on it, where the system has one)
 function pushChat(chatId, messageId) {
   const me = fb().auth.currentUser;
@@ -424,7 +447,7 @@ export const editMessage = (chatId, id, text) =>
   updateDoc(doc(msgsCol(chatId), id), { text, editedAt: serverTimestamp() });
 // for everyone: it stays in the chat as "This message was deleted"
 export const deleteMessage = (chatId, id) =>
-  updateDoc(doc(msgsCol(chatId), id), { text: '', deleted: true, reply: deleteField(), editedAt: deleteField() });
+  updateDoc(doc(msgsCol(chatId), id), { text: '', deleted: true, reply: deleteField(), editedAt: deleteField(), audio: deleteField() });
 
 // read (blue ticks) also counts as delivered
 export const markChatRead = (chatId, user) =>

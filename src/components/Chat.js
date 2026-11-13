@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  MAX_MESSAGE, deleteMessage, editMessage, emailOf, markChatRead, nameOf, sendMessage, setTyping, startChat, watchPerson,
+  MAX_MESSAGE, MAX_VOICE_B64, MAX_VOICE_SECS, VOICE_PREVIEW,
+  deleteMessage, editMessage, emailOf, markChatRead, nameOf, sendMessage, sendVoiceNote, setTyping, startChat, watchPerson,
 } from '@/lib/data';
 import { friendlyError } from '@/lib/firebase';
 import { EMAIL_RE, roleLabel } from '@/lib/permissions';
@@ -17,6 +18,7 @@ const GROUP_MS = 5 * 60 * 1000; // messages this close together from one person 
 
 const ms = (ts) => (ts ? toDate(ts).getTime() : 0);
 const pad = (n) => String(n).padStart(2, '0');
+const mmss = (s) => `${Math.floor(s / 60)}:${pad(Math.floor(s % 60))}`;
 const clock = (d) => `${d.getHours() % 12 || 12}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
 const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 
@@ -60,7 +62,7 @@ const bigEmoji = (t) => EMOJI_ONLY.test(t) && !/\d|#|\*/.test(t) && [...t.replac
 export const matchesOf = (messages, q) => {
   const t = q.trim().toLowerCase();
   if (!t) return [];
-  return (messages || []).filter((m) => !m.deleted && m.text.toLowerCase().includes(t));
+  return (messages || []).filter((m) => !m.deleted && !m.audio && m.text.toLowerCase().includes(t));
 };
 export function splitMatch(text, q) {
   const t = q.trim().toLowerCase();
@@ -106,6 +108,7 @@ const Ic = {
   down: <path d="m6 9 6 6 6-6" />,
   smile: <><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01" /></>,
   mic: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></>,
+  trash: <><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6.5 7l.9 12.1A2 2 0 0 0 9.4 21h5.2a2 2 0 0 0 2-1.9L17.5 7M10 11v6M14 11v6" /></>,
   lock: <><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></>,
 };
 const Svg = ({ name, size = 20, sw = 2 }) => (
@@ -445,6 +448,103 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
   const coarse = useRef(false);
   useEffect(() => { coarse.current = window.matchMedia('(pointer: coarse)').matches; }, []);
 
+  // ---- voice notes: tap the mic to record, the paper plane to send, the bin to throw away
+  const [rec, setRec] = useState(false);
+  const [recSecs, setRecSecs] = useState(0);
+  const recRef = useRef(null); // { recorder, stream, chunks, mime, startedAt, timer, discard }
+  const replyRef = useRef(null); // the reply as it is when the recording stops, not when it starts
+  useEffect(() => { replyRef.current = reply; }, [reply]);
+
+  async function finishRec(r) {
+    if (recRef.current === r) { recRef.current = null; setRec(false); }
+    const secs = (Date.now() - r.startedAt) / 1000;
+    if (r.discard || secs < 1 || !r.chunks.length) return; // thrown away, or an accidental tap
+    setSending(true);
+    try {
+      const blob = new Blob(r.chunks, { type: r.mime });
+      const dataUrl = await new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onload = () => res(String(fr.result));
+        fr.onerror = () => rej(fr.error || new Error('could not read the recording'));
+        fr.readAsDataURL(blob);
+      });
+      const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+      if (!b64) throw new Error('the recording came out empty');
+      if (b64.length > MAX_VOICE_B64) { toast('That voice note is too big to send. Try a shorter one.', 'err'); setSending(false); return; }
+      const q = replyRef.current ? { id: replyRef.current.id, text: (replyRef.current.audio ? VOICE_PREVIEW : replyRef.current.text).slice(0, 300), from: replyRef.current.from } : null;
+      setReply(null);
+      await sendVoiceNote(chatId, user, {
+        data: b64,
+        mime: r.mime.split(';')[0] || 'audio/webm',
+        duration: Math.min(MAX_VOICE_SECS + 1, Math.max(1, Math.round(secs))),
+      }, q);
+    } catch (er) {
+      toast(`Not sent: ${friendlyError(er)}`, 'err');
+    }
+    setSending(false);
+  }
+
+  function stopRec(discard) {
+    const r = recRef.current;
+    if (!r) return;
+    r.discard = r.discard || discard;
+    clearInterval(r.timer);
+    r.stream.getTracks().forEach((tr) => tr.stop());
+    try {
+      if (r.recorder.state !== 'inactive') r.recorder.stop(); // onstop → finishRec
+      else finishRec(r);
+    } catch { finishRec(r); }
+  }
+
+  async function startRec() {
+    if (recRef.current || sending) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      return toast("Voice notes aren't supported on this browser.", 'err');
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    } catch {
+      return toast("The microphone is blocked. Allow it in your browser's site settings to send voice notes.", 'err');
+    }
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported?.(t)) || '';
+    let recorder;
+    try {
+      recorder = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32000 });
+    } catch {
+      stream.getTracks().forEach((tr) => tr.stop());
+      return toast("Voice notes aren't supported on this browser.", 'err');
+    }
+    const r = { recorder, stream, chunks: [], mime: recorder.mimeType || mime || 'audio/webm', startedAt: Date.now(), timer: 0, discard: false };
+    recRef.current = r;
+    recorder.ondataavailable = (e) => { if (e.data?.size) r.chunks.push(e.data); };
+    recorder.onstop = () => finishRec(r);
+    // the permission was withdrawn, or the microphone went away, while recording
+    stream.getAudioTracks()[0].onended = () => {
+      if (recRef.current === r && !r.discard) { stopRec(true); toast('Recording stopped: the microphone went away.', 'err'); }
+    };
+    recorder.start(1000);
+    setEmoji(false);
+    setRecSecs(0);
+    setRec(true);
+    r.timer = setInterval(() => {
+      const secs = (Date.now() - r.startedAt) / 1000;
+      setRecSecs(secs);
+      if (secs >= MAX_VOICE_SECS) stopRec(false); // long enough: send what's there
+    }, 250);
+    return undefined;
+  }
+
+  // leaving the conversation while recording: throw the recording away and free the microphone
+  useEffect(() => () => { const r = recRef.current; if (r) { r.discard = true; clearInterval(r.timer); r.stream.getTracks().forEach((tr) => tr.stop()); try { r.recorder.stop(); } catch { /* already stopped */ } } }, []);
+  // Esc throws the recording away (the textarea and its key handler are hidden while recording)
+  useEffect(() => {
+    if (!rec) return undefined;
+    const key = (e) => { if (e.key === 'Escape') stopRec(true); };
+    document.addEventListener('keydown', key);
+    return () => document.removeEventListener('keydown', key);
+  }, [rec]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // search in the chat
   const [finding, setFinding] = useState(false);
   const [fq, setFq] = useState('');
@@ -555,7 +655,7 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
         if (v !== editing.text) await editMessage(chatId, editing.id, v);
         setEditing(null);
       } else {
-        const r = reply ? { id: reply.id, text: reply.text.slice(0, 300), from: reply.from } : null;
+        const r = reply ? { id: reply.id, text: (reply.audio ? VOICE_PREVIEW : reply.text).slice(0, 300), from: reply.from } : null;
         setText('');
         setReply(null);
         lastTyping.current = 0;
@@ -682,8 +782,8 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
       {menuMsg && (
         <div className="msg-menu" role="menu" style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 220) }}>
           {!menuMsg.deleted && <button type="button" role="menuitem" onClick={() => startReply(menuMsg)}>Reply</button>}
-          {!menuMsg.deleted && <button type="button" role="menuitem" onClick={() => copy(menuMsg)}>Copy</button>}
-          {menuMsg.from === me && !menuMsg.deleted && Date.now() - ms(menuMsg.createdAt) < EDIT_MINS * 60000 && (
+          {!menuMsg.deleted && !menuMsg.audio && <button type="button" role="menuitem" onClick={() => copy(menuMsg)}>Copy</button>}
+          {menuMsg.from === me && !menuMsg.deleted && !menuMsg.audio && Date.now() - ms(menuMsg.createdAt) < EDIT_MINS * 60000 && (
             <button type="button" role="menuitem" onClick={() => startEdit(menuMsg)}>Edit</button>
           )}
           {menuMsg.from === me && !menuMsg.deleted && (confirmDel === menuMsg.id ? (
@@ -700,27 +800,43 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
           <div className="chat-bar">
             <div className="chat-bar-b">
               <b>{editing ? 'Edit message' : reply.from === me ? 'You' : name}</b>
-              <span>{(editing || reply).text}</span>
+              <span>{(editing || reply).audio ? VOICE_PREVIEW : (editing || reply).text}</span>
             </div>
             <button type="button" className="ic" onClick={cancelBar} aria-label="Cancel">✕</button>
           </div>
         )}
         <div className="chat-row">
           <div className="chat-pill">
-            <button type="button" className={emoji ? 'wa-ic on' : 'wa-ic'} onClick={() => setEmoji((o) => !o)}
-              aria-label={emoji ? 'Close emoji' : 'Emoji'} aria-expanded={emoji} title="Emoji"><Svg name="smile" size={22} /></button>
-            <textarea ref={input} className="chat-in" rows={1} value={text} maxLength={MAX_MESSAGE} placeholder="Type a message"
-              aria-label="Message" enterKeyHint={coarse.current ? 'enter' : 'send'}
-              onChange={(e) => onType(e.target.value)}
-              onBlur={() => { if (lastTyping.current) { lastTyping.current = 0; setTyping(chatId, user, false).catch(() => {}); } }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && !coarse.current) { e.preventDefault(); submit(); }
-                if (e.key === 'Escape') { if (emoji) setEmoji(false); else if (reply || editing) cancelBar(); }
-              }} />
+            {rec ? (
+              <div className="rec-row">
+                <span className="rec-dot" aria-hidden="true" />
+                <span className="rec-time" aria-live="polite">{mmss(recSecs)}</span>
+                <span className="rec-hint">Recording… up to {mmss(MAX_VOICE_SECS)}</span>
+                <button type="button" className="wa-ic" onClick={() => stopRec(true)}
+                  aria-label="Throw the recording away" title="Throw away"><Svg name="trash" size={22} /></button>
+              </div>
+            ) : (
+              <>
+                <button type="button" className={emoji ? 'wa-ic on' : 'wa-ic'} onClick={() => setEmoji((o) => !o)}
+                  aria-label={emoji ? 'Close emoji' : 'Emoji'} aria-expanded={emoji} title="Emoji"><Svg name="smile" size={22} /></button>
+                <textarea ref={input} className="chat-in" rows={1} value={text} maxLength={MAX_MESSAGE} placeholder="Type a message"
+                  aria-label="Message" enterKeyHint={coarse.current ? 'enter' : 'send'}
+                  onChange={(e) => onType(e.target.value)}
+                  onBlur={() => { if (lastTyping.current) { lastTyping.current = 0; setTyping(chatId, user, false).catch(() => {}); } }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && !coarse.current) { e.preventDefault(); submit(); }
+                    if (e.key === 'Escape') { if (emoji) setEmoji(false); else if (reply || editing) cancelBar(); }
+                  }} />
+              </>
+            )}
           </div>
-          {empty ? (
-            <button type="button" className="chat-send" onClick={() => toast("Voice notes aren't available yet. Type a message instead.", 'info')}
-              aria-label="Voice note (not available yet)" title="Voice notes aren't available yet"><Svg name="mic" size={22} /></button>
+          {rec ? (
+            <button type="button" className="chat-send" onClick={() => stopRec(false)} aria-label="Send voice note" title="Send voice note">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z" /></svg>
+            </button>
+          ) : empty ? (
+            <button type="button" className="chat-send" onClick={startRec} disabled={sending}
+              aria-label="Record a voice note" title="Record a voice note"><Svg name="mic" size={22} /></button>
           ) : (
             <button type="submit" className="chat-send" disabled={sending} aria-label={editing ? 'Save' : 'Send'}>
               {editing ? (
@@ -736,14 +852,74 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
   );
 }
 
+// A voice note: play / pause and a seekable bar. The length shown is the one stored with the note, because the
+// browser reports Infinity for the length of audio recorded in Chrome. The audio element is made on the first
+// play, so a page of messages doesn't decode every note at once.
+let nowPlaying = null;
+function VoiceNote({ audio }) {
+  const el = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [t, setT] = useState(0);
+  const [bad, setBad] = useState(false);
+  const total = Math.max(1, audio.duration || 1);
+
+  useEffect(() => () => {
+    const a = el.current;
+    if (a) { a.pause(); a.removeAttribute('src'); a.load(); }
+    if (nowPlaying === a) nowPlaying = null;
+  }, []);
+
+  function make() {
+    const a = new Audio(`data:${audio.mime};base64,${audio.data}`);
+    a.addEventListener('timeupdate', () => setT(Math.min(a.currentTime, total)));
+    a.addEventListener('ended', () => { setPlaying(false); setT(0); a.currentTime = 0; });
+    a.addEventListener('pause', () => setPlaying(false));
+    a.addEventListener('play', () => setPlaying(true));
+    a.addEventListener('error', () => { setBad(true); setPlaying(false); });
+    el.current = a;
+    return a;
+  }
+  async function toggle() {
+    const a = el.current || make();
+    if (!a.paused) { a.pause(); return; }
+    if (nowPlaying && nowPlaying !== a) nowPlaying.pause();
+    nowPlaying = a;
+    try { await a.play(); } catch { setBad(true); }
+  }
+  function seek(v) {
+    const a = el.current || make();
+    a.currentTime = v;
+    setT(v);
+  }
+
+  if (bad) return <span className="cm-t vn-bad">🎤 Can't play this voice note on this device</span>;
+  return (
+    <div className="vn">
+      <button type="button" className="vn-play" onClick={toggle} aria-label={playing ? 'Pause voice note' : 'Play voice note'}>
+        {playing ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4.5" height="16" rx="1" /><rect x="13.5" y="4" width="4.5" height="16" rx="1" /></svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" /></svg>
+        )}
+      </button>
+      <div className="vn-mid">
+        <input type="range" className="vn-track" min={0} max={total} step={0.1} value={t}
+          style={{ '--p': `${Math.min(100, (t / total) * 100)}%` }}
+          onChange={(e) => seek(Number(e.target.value))} aria-label="Voice note position" />
+        <span className="vn-time">{mmss(playing || t > 0 ? t : total)}{(playing || t > 0) && ` / ${mmss(total)}`}</span>
+      </div>
+    </div>
+  );
+}
+
 // One message. Long-press (phones) or the ⌄ (computers) for Reply / Copy / Edit / Delete; swipe right to reply.
 // q: the in-chat search (matches highlighted) · current: the match being shown
 function Bubble({ m, first, last, mine, name, me, who, tick, q, current, onMenu, onReply, onJump }) {
   const d = toDate(m.createdAt);
   const press = useRef(null);
   const [dx, setDx] = useState(0);
-  const big = !m.deleted && !q && bigEmoji(m.text);
-  const hit = q && !m.deleted && m.text.toLowerCase().includes(q.trim().toLowerCase()) && q.trim();
+  const big = !m.deleted && !m.audio && !q && bigEmoji(m.text);
+  const hit = q && !m.deleted && !m.audio && m.text.toLowerCase().includes(q.trim().toLowerCase()) && q.trim();
 
   const down = (e) => {
     if (e.target.closest('a, button')) return;
@@ -786,6 +962,8 @@ function Bubble({ m, first, last, mine, name, me, who, tick, q, current, onMenu,
           )}
           {m.deleted ? (
             <span className="cm-t">🚫 {mine ? 'You deleted this message' : 'This message was deleted'}</span>
+          ) : m.audio ? (
+            <VoiceNote audio={m.audio} />
           ) : (
             <span className="cm-t">{hit ? <Hl text={m.text} q={q} /> : <Linked text={m.text} />}</span>
           )}

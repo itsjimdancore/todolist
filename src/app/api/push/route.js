@@ -71,7 +71,7 @@ export async function POST(req) {
         return d;
       }).catch(() => null);
       const to = members.find((e) => e !== myEmail);
-      if (m && to) sent += await deliverChat(a, { chatId, to, fromName: chat.data().names?.[myEmail] || caller.name || myEmail.split('@')[0], text: m.text }, origin);
+      if (m && to) sent += await deliverChat(a, { chatId, to, fromName: chat.data().names?.[myEmail] || caller.name || myEmail.split('@')[0], text: m.audio ? '🎤 Voice message' : m.text }, origin);
     }
   }
 

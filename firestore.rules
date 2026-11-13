@@ -448,23 +448,34 @@ service cloud.firestore {
           return !('reply' in d) || (d.reply is map && d.reply.keys().hasOnly(['id', 'text', 'from'])
             && d.reply.id is string && d.reply.text is string && d.reply.text.size() <= 300 && d.reply.from is string);
         }
+        // a voice note: base64 audio inside the message, capped so the doc stays far under 1 MiB
+        function validAudio(d) {
+          return !('audio' in d) || (d.audio is map && d.audio.keys().hasOnly(['data', 'mime', 'duration'])
+            && d.audio.data is string && d.audio.data.size() >= 1 && d.audio.data.size() <= 700000
+            && d.audio.mime is string && d.audio.mime.size() <= 80
+            && d.audio.duration is number && d.audio.duration > 0 && d.audio.duration <= 91);
+        }
         allow read: if inChat();
         allow create: if inChat()
-          && request.resource.data.keys().hasOnly(['from', 'text', 'createdAt', 'reply'])
+          && request.resource.data.keys().hasOnly(['from', 'text', 'createdAt', 'reply', 'audio'])
           && request.resource.data.from == myEmail()
-          && request.resource.data.text is string && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 4000
+          && request.resource.data.text is string && request.resource.data.text.size() <= 4000
+          && (request.resource.data.text.size() >= 1 || 'audio' in request.resource.data)
           && request.resource.data.createdAt == request.time
-          && validReply(request.resource.data);
+          && validReply(request.resource.data)
+          && validAudio(request.resource.data);
         // my own messages: edit the text (within 3 hours of sending, read or not), or delete it for everyone
         // (it stays as "This message was deleted")
         allow update: if inChat() && resource.data.from == myEmail() && resource.data.get('deleted', false) == false && (
           (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
+            && !('audio' in resource.data)
             && request.resource.data.text is string && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 4000
             && request.resource.data.editedAt == request.time
             && request.time < resource.data.createdAt + duration.value(3, 'h'))
-          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'deleted', 'reply', 'editedAt'])
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'deleted', 'reply', 'editedAt', 'audio'])
             && request.resource.data.deleted == true && request.resource.data.text == ''
-            && !('reply' in request.resource.data) && !('editedAt' in request.resource.data))
+            && !('reply' in request.resource.data) && !('editedAt' in request.resource.data)
+            && !('audio' in request.resource.data))
         );
         allow delete: if false;
       }
