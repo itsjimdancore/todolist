@@ -983,30 +983,53 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
   color: var(--muted); font-size: 13.5px; display: flex; flex-direction: column; gap: 6px; }
 .auth-checking { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 40px 0; color: var(--muted); }
 
-/* Loading (Loading.js): the lucide LoaderIcon spinning, and "Loading" moving in a wave */
+/* Spinner (Loading.js): the lucide LoaderIcon spinning, for buttons */
 .spinner { flex: none; display: inline-block; vertical-align: -3px; animation: spin 1s linear infinite; }
 .btn .spinner { margin-right: 2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--muted); }
-.loading-row { display: inline-flex; align-items: center; gap: 10px; }
-.loading .spinner { color: var(--accent); }
-.loading.page { min-height: 60vh; min-height: 60dvh; gap: 10px; }
-.loading.page .loading-row { gap: 14px; font-family: var(--display); font-size: 24px; font-weight: 700; color: var(--fg); }
-.loading.block { padding: 28px 12px; font-size: 15px; font-weight: 600; }
-.loading.inline { display: inline-flex; flex-direction: row; padding: 0; font-size: 13px; }
-.loading.inline .loading-row { gap: 6px; }
-.loading-hint { font-size: 13px; font-weight: 400; color: var(--muted); }
-.loading.page .loading-hint { font-family: var(--body); font-size: 14px; }
-.wave { display: inline-flex; }
-.wave > span { display: inline-block; animation: wave 1.4s ease-in-out infinite; animation-delay: calc(var(--i) * .09s); }
-@keyframes wave {
-  0%, 60%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-.35em); color: var(--accent); }
+
+/* Loading (Loading.js): four rings spinning at different speeds, a title, and an optional hint under it.
+   The rings are conic gradients cut into thin bands by radial masks, all in currentColor (the accent). */
+.loading { --ring: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  width: 100%; margin-inline: auto; text-align: center; }
+.loader-rings { position: relative; flex: none; width: var(--ring); height: var(--ring); color: var(--accent); }
+.loader-ring { position: absolute; inset: 0; border-radius: 50%; animation: spin linear infinite;
+  -webkit-mask: radial-gradient(circle at 50% 50%, var(--m)); mask: radial-gradient(circle at 50% 50%, var(--m)); }
+.loader-ring.outer { --m: transparent 35%, #000 37%, #000 39%, transparent 41%; opacity: .8; animation-duration: 3s;
+  background: conic-gradient(from 0deg, transparent 0deg, currentColor 90deg, transparent 180deg); }
+.loader-ring.primary { --m: transparent 42%, #000 44%, #000 48%, transparent 50%; opacity: .9; animation-duration: 1.2s;
+  background: conic-gradient(from 0deg, transparent 0deg, currentColor 120deg, color-mix(in srgb, currentColor 50%, transparent) 240deg, transparent 360deg); }
+.loader-ring.counter { --m: transparent 52%, #000 54%, #000 56%, transparent 58%; opacity: .35; animation-duration: 4s; animation-direction: reverse;
+  background: conic-gradient(from 180deg, transparent 0deg, color-mix(in srgb, currentColor 60%, transparent) 45deg, transparent 90deg); }
+.loader-ring.accent { --m: transparent 61%, #000 62%, #000 63%, transparent 64%; opacity: .5; animation-duration: 3.5s;
+  background: conic-gradient(from 270deg, transparent 0deg, color-mix(in srgb, currentColor 40%, transparent) 20deg, transparent 40deg); }
+.loader-text { display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: min(15rem, 100%); }
+.loader-title { display: block; font-family: var(--display); font-size: 15px; font-weight: 600; line-height: 1.15; letter-spacing: -.01em; color: var(--fg); }
+.loader-hint { display: block; font-size: 13px; line-height: 1.45; color: var(--muted); text-wrap: balance; }
+@media (prefers-reduced-motion: no-preference) {
+  .loader-text { transition: opacity .2s ease-out; }
+  @starting-style { .loader-text { opacity: 0; } }
 }
+
+/* page: fills whatever it's in (the whole screen, the main pane, the chat pane) and sits in its middle,
+   on phones and wide screens alike; the rings grow with the screen between 112px and 160px */
+.loading.page { --ring: clamp(112px, 28vw, 160px); flex: 1; gap: 28px; min-height: 100vh; min-height: 100dvh;
+  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.main > .loading.page, .chat-page > .loading.page { min-height: 0; }
+.loading.page .loader-text { gap: 10px; max-width: min(18rem, 100%); }
+.loading.page .loader-title { font-size: clamp(18px, 4.5vw, 22px); font-weight: 700; letter-spacing: -.02em; }
+.loading.page .loader-hint { font-size: 14px; }
+.loading.block { padding: 28px 12px; }
+/* inline: one small ring beside the text; at this size only the main ring, drawn thicker so it shows */
+.loading.inline { --ring: 16px; display: inline-flex; flex-direction: row; gap: 7px; width: auto; vertical-align: middle; }
+.loading.inline .loader-ring:not(.primary) { display: none; }
+.loading.inline .loader-ring.primary { --m: transparent 38%, #000 42%, #000 62%, transparent 66%; }
+.loading.inline .loader-title { font-family: inherit; font-size: 13px; font-weight: 400; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation-duration: 2.4s; }
-  .wave > span { animation: none; }
+  .loader-ring { animation: pulse 2s ease-in-out infinite; }
 }
+@keyframes pulse { 50% { opacity: .2; } }
 
 /* Tablets and phones: just the form, logo above it, the whole thing centred on the screen.
    The auto margins centre it top-to-bottom, and shrink to nothing when it's taller than the screen

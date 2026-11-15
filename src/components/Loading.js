@@ -1,5 +1,7 @@
 'use client';
-// Loading indicators: the spinning LoaderIcon, and "Loading" with its letters moving in a wave beside it
+// Loading indicators: the spinning LoaderIcon for buttons, and the ring loader (four rings spinning at
+// different speeds) with a title and an optional line under it. The rings are drawn in CSS (globals.css)
+// and tinted with currentColor, which is the app's --accent.
 import { LoaderIcon } from 'lucide-react';
 
 // Pass aria-hidden when text beside it already says what's happening (e.g. "Saving…" in a button)
@@ -8,27 +10,20 @@ export function Spinner({ className = '', size = 16, label = 'Loading', ...props
   return <LoaderIcon {...a11y} width={size} height={size} className={`spinner ${className}`} {...props} />;
 }
 
-// The word, one span per letter, each a little later than the one before
-export function WaveText({ text = 'Loading' }) {
-  return (
-    <span className="wave" aria-hidden="true">
-      {[...text].map((ch, i) => (
-        <span key={i} style={{ '--i': i }}>{ch === ' ' ? ' ' : ch}</span>
-      ))}
-    </span>
-  );
-}
+const RINGS = ['outer', 'primary', 'counter', 'accent'];
 
-// variant: 'page' (centred, big), 'block' (inside a card or list), 'inline' (a line of small text)
+// variant: 'page' (fills and centres in the screen or the main pane), 'block' (inside a card or list),
+// 'inline' (a small ring and the text on one line)
 export default function Loading({ text = 'Loading', hint, variant = 'block', className = '' }) {
-  const size = variant === 'page' ? 26 : variant === 'inline' ? 14 : 18;
   return (
-    <div className={`loading ${variant} ${className}`} role="status" aria-live="polite" aria-label={hint ? `${text} ${hint}` : text}>
-      <span className="loading-row">
-        <LoaderIcon width={size} height={size} className="spinner" aria-hidden="true" />
-        <WaveText text={text} />
-      </span>
-      {hint && <span className="loading-hint">{hint}</span>}
+    <div className={`loading ${variant} ${className}`} role="status" aria-live="polite">
+      <div className="loader-rings" aria-hidden="true">
+        {RINGS.map((id) => <span key={id} className={`loader-ring ${id}`} />)}
+      </div>
+      <div className="loader-text">
+        <span className="loader-title">{text}</span>
+        {hint && variant !== 'inline' && <span className="loader-hint">{hint}</span>}
+      </div>
     </div>
   );
 }
