@@ -372,6 +372,10 @@ export const MAX_MESSAGE = 4000;
 export const MAX_VOICE_SECS = 90;
 export const MAX_VOICE_B64 = 700000;
 export const VOICE_PREVIEW = '🎤 Voice message';
+// stickers: { pack, id } for a built-in one (the image ships in public/stickers/{pack}/), or
+// { data: base64 (no "data:" prefix), mime: image/webp | image/png, hash: SHA-256 of data, hex } for a made one
+export const MAX_STICKER_B64 = 80000;
+export const STICKER_PREVIEW = '🖼️ Sticker';
 
 // my chats (live). The app uses the one private chat: the first.
 export function watchMyChats(email, onData, onError) {
@@ -429,6 +433,23 @@ export async function sendVoiceNote(chatId, user, audio, reply = null) {
   return ref.id;
 }
 
+// a sticker (see STICKER_PREVIEW above for its shape): the whole message, sent at once
+export async function sendSticker(chatId, user, sticker, reply = null) {
+  const me = emailOf(user);
+  const ref = doc(msgsCol(chatId));
+  const b = writeBatch(db());
+  b.set(ref, { from: me, text: '', sticker, createdAt: serverTimestamp(), ...(reply ? { reply } : {}) });
+  b.update(chatRef(chatId),
+    'last', { text: STICKER_PREVIEW, from: me, at: serverTimestamp() },
+    new FieldPath('readAt', me), serverTimestamp(),
+    new FieldPath('deliveredAt', me), serverTimestamp(),
+    new FieldPath('typing', me), deleteField(),
+    new FieldPath('names', me), nameOf(user).slice(0, 120));
+  await b.commit();
+  pushChat(chatId, ref.id);
+  return ref.id;
+}
+
 // a device notification for the other person (and a reply box on it, where the system has one)
 function pushChat(chatId, messageId) {
   const me = fb().auth.currentUser;
@@ -447,7 +468,7 @@ export const editMessage = (chatId, id, text) =>
   updateDoc(doc(msgsCol(chatId), id), { text, editedAt: serverTimestamp() });
 // for everyone: it stays in the chat as "This message was deleted"
 export const deleteMessage = (chatId, id) =>
-  updateDoc(doc(msgsCol(chatId), id), { text: '', deleted: true, reply: deleteField(), editedAt: deleteField(), audio: deleteField() });
+  updateDoc(doc(msgsCol(chatId), id), { text: '', deleted: true, reply: deleteField(), editedAt: deleteField(), audio: deleteField(), sticker: deleteField(), call: deleteField() });
 
 // read (blue ticks) also counts as delivered
 export const markChatRead = (chatId, user) =>

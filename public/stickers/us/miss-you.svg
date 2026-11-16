@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#000" flood-opacity=".28"/></filter></defs>
+<g filter="url(#sh)"><path transform="translate(256 210) scale(2.1)" d="M0 60C-70 15-95-20-80-50c14-28 55-35 80-5c25-30 66-23 80 5c15 30-10 65-80 110z" fill="#f2867a" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="6.7"/>
+<path d="M206 212q14-12 28 0M278 212q14-12 28 0" stroke="#06211d" stroke-width="9" fill="none" stroke-linecap="round"/>
+<path d="M234 262q22-14 44 0" stroke="#06211d" stroke-width="9" fill="none" stroke-linecap="round"/>
+<path d="M300 226q-6 20 6 26q12-6 6-26l-6-10z" fill="#5aa9e6"/>
+<text x="256" y="450" text-anchor="middle" font-size="76" font-family="'Arial Rounded MT Bold','Nunito','Segoe UI Black','Segoe UI',Arial,sans-serif" font-weight="800" fill="#f2867a" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="18" transform="rotate(-4 256 450)">Miss you</text></g></svg>

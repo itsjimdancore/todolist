@@ -209,6 +209,29 @@ service cloud.firestore {
         && request.resource.data.get('music', []).size() <= 100;
     }
 
+    // ---------- my saved stickers: favourites and recently sent (only I can see them) ----------
+    // users/{uid}/stickers/{key}: key is the image's SHA-256 (hex) for a made or received sticker, or "pack-id"
+    // for a built-in one, so saving the same sticker twice keeps one copy.
+    match /users/{uid}/stickers/{key} {
+      function validSaved(d) {
+        return d.keys().hasOnly(['pack', 'id', 'data', 'mime', 'fav', 'favAt', 'lastUsedAt'])
+          && key.matches('^[a-z0-9-]{1,100}$')
+          && ((d.keys().hasAll(['pack', 'id']) && !('data' in d) && !('mime' in d)
+                && d.pack is string && d.pack.matches('^[a-z0-9-]{1,30}$')
+                && d.id is string && d.id.matches('^[a-z0-9-]{1,60}$')
+                && key == d.pack + '-' + d.id)
+            || (d.keys().hasAll(['data', 'mime']) && !('pack' in d) && !('id' in d)
+                && key.matches('^[0-9a-f]{64}$')
+                && d.data is string && d.data.size() >= 1 && d.data.size() <= 80000
+                && d.mime in ['image/webp', 'image/png']))
+          && d.get('fav', false) is bool
+          && (!('favAt' in d) || d.favAt is timestamp)
+          && (!('lastUsedAt' in d) || d.lastUsedAt is timestamp);
+      }
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid && validSaved(request.resource.data);
+    }
+
     // ---------- people/{email}: name, photo and "last active", shown when someone taps your avatar on a shared list ----------
     // Only you write yours, and lastSeen is always the server's time. Anyone signed in can fetch one card by its
     // email (they must already know it), but nobody can list them.
@@ -455,29 +478,136 @@ service cloud.firestore {
             && d.audio.mime is string && d.audio.mime.size() <= 80
             && d.audio.duration is number && d.audio.duration > 0 && d.audio.duration <= 91);
         }
+        // a sticker: one from a built-in pack { pack, id } (the image ships with the app), or a made / received one
+        // carried inside the message { data: base64 WebP or PNG, mime, hash: SHA-256 of data, hex }
+        function validSticker(d) {
+          return !('sticker' in d) || (d.sticker is map && (
+            (d.sticker.keys().hasOnly(['pack', 'id']) && d.sticker.keys().hasAll(['pack', 'id'])
+              && d.sticker.pack is string && d.sticker.pack.matches('^[a-z0-9-]{1,30}$')
+              && d.sticker.id is string && d.sticker.id.matches('^[a-z0-9-]{1,60}$'))
+            || (d.sticker.keys().hasOnly(['data', 'mime', 'hash']) && d.sticker.keys().hasAll(['data', 'mime', 'hash'])
+              && d.sticker.data is string && d.sticker.data.size() >= 1 && d.sticker.data.size() <= 80000
+              && d.sticker.mime in ['image/webp', 'image/png']
+              && d.sticker.hash is string && d.sticker.hash.matches('^[0-9a-f]{64}$'))));
+        }
+        // a call's line in the chat ("Voice call · 4:12", "Missed video call"): { callId, kind, status, duration in
+        // seconds }. Only the person who made the call writes it, once the call is over, and nothing else goes with it.
+        function validCallLog(d) {
+          return !('call' in d) || (d.call is map && d.call.keys().hasOnly(['callId', 'kind', 'status', 'duration'])
+            && d.call.keys().hasAll(['callId', 'kind', 'status', 'duration'])
+            && d.call.callId is string && d.call.callId.size() >= 1 && d.call.callId.size() <= 100
+            && d.call.kind in ['voice', 'video']
+            // failed: answered, but the two networks couldn't reach each other
+            && d.call.status in ['ended', 'missed', 'declined', 'busy', 'failed']
+            && d.call.duration is number && d.call.duration >= 0 && d.call.duration <= 21600
+            && d.text == '' && !('audio' in d) && !('sticker' in d) && !('reply' in d)
+            && exists(/databases/$(database)/documents/chats/$(chatId)/calls/$(d.call.callId))
+            && get(/databases/$(database)/documents/chats/$(chatId)/calls/$(d.call.callId)).data.from == myEmail());
+        }
         allow read: if inChat();
         allow create: if inChat()
-          && request.resource.data.keys().hasOnly(['from', 'text', 'createdAt', 'reply', 'audio'])
+          && request.resource.data.keys().hasOnly(['from', 'text', 'createdAt', 'reply', 'audio', 'sticker', 'call'])
           && request.resource.data.from == myEmail()
           && request.resource.data.text is string && request.resource.data.text.size() <= 4000
-          && (request.resource.data.text.size() >= 1 || 'audio' in request.resource.data)
+          && (request.resource.data.text.size() >= 1 || 'audio' in request.resource.data || 'sticker' in request.resource.data
+            || 'call' in request.resource.data)
+          // a sticker is the whole message: no text or audio with it
+          && (!('sticker' in request.resource.data) || (request.resource.data.text == '' && !('audio' in request.resource.data)))
           && request.resource.data.createdAt == request.time
           && validReply(request.resource.data)
-          && validAudio(request.resource.data);
+          && validAudio(request.resource.data)
+          && validSticker(request.resource.data)
+          && validCallLog(request.resource.data);
         // my own messages: edit the text (within 3 hours of sending, read or not), or delete it for everyone
         // (it stays as "This message was deleted")
         allow update: if inChat() && resource.data.from == myEmail() && resource.data.get('deleted', false) == false && (
           (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
-            && !('audio' in resource.data)
+            && !('audio' in resource.data) && !('sticker' in resource.data) && !('call' in resource.data)
             && request.resource.data.text is string && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 4000
             && request.resource.data.editedAt == request.time
             && request.time < resource.data.createdAt + duration.value(3, 'h'))
-          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'deleted', 'reply', 'editedAt', 'audio'])
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'deleted', 'reply', 'editedAt', 'audio', 'sticker', 'call'])
             && request.resource.data.deleted == true && request.resource.data.text == ''
             && !('reply' in request.resource.data) && !('editedAt' in request.resource.data)
-            && !('audio' in request.resource.data))
+            && !('audio' in request.resource.data) && !('sticker' in request.resource.data)
+            && !('call' in request.resource.data))
         );
         allow delete: if false;
+      }
+
+      // ---------- voice and video calls (WebRTC) ----------
+      // chats/{chatId}/calls/{callId}: the setup messages for one call between the chat's two members. The call
+      // itself goes straight between the two browsers (or through the TURN relay); only this passes through here.
+      //   ringing  → accepted (the person called answers) → ended (either hangs up)
+      //   ringing  → declined | busy (the person called)  · missed (the caller gives up, or either, 45 s on)
+      // The descriptions and network routes contain IP addresses, so only the two members can read any of it.
+      match /calls/{callId} {
+        function members() { return get(/databases/$(database)/documents/chats/$(chatId)).data.members; }
+        function inCall() { return hasEmail() && myEmail() in members(); }
+        function validSdp(s, type) {
+          return s is map && s.keys().hasOnly(['type', 'sdp']) && s.type == type && s.sdp is string && s.sdp.size() >= 1 && s.sdp.size() <= 30000;
+        }
+        function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+        function ending(statuses) {
+          return changed().hasOnly(['status', 'endedAt', 'endedBy'])
+            && request.resource.data.status in statuses
+            && request.resource.data.endedAt == request.time && request.resource.data.endedBy == myEmail();
+        }
+        allow read: if inCall();
+        allow create: if inCall()
+          && request.resource.data.keys().hasOnly(['from', 'to', 'kind', 'status', 'offer', 'createdAt'])
+          && request.resource.data.from == myEmail()
+          && request.resource.data.to is string && request.resource.data.to != myEmail() && request.resource.data.to in members()
+          && request.resource.data.kind in ['voice', 'video']
+          && request.resource.data.status == 'ringing'
+          && validSdp(request.resource.data.offer, 'offer')
+          && request.resource.data.createdAt == request.time;
+        allow update: if inCall() && (
+          // the person called answers, within a minute of the ring
+          (resource.data.status == 'ringing' && resource.data.to == myEmail()
+            && changed().hasOnly(['status', 'answer', 'answeredAt'])
+            && request.resource.data.status == 'accepted' && validSdp(request.resource.data.answer, 'answer')
+            && request.resource.data.answeredAt == request.time
+            && request.time < resource.data.createdAt + duration.value(60, 's'))
+          // … or declines it, or is already on another call
+          || (resource.data.status == 'ringing' && resource.data.to == myEmail() && ending(['declined', 'busy']))
+          // the caller gives up while it rings; or anyone, once it has rung for 45 seconds unanswered
+          || (resource.data.status == 'ringing' && ending(['missed'])
+            && (resource.data.from == myEmail() || request.time > resource.data.createdAt + duration.value(45, 's')))
+          // either hangs up
+          || (resource.data.status == 'accepted' && ending(['ended']))
+          // reconnecting (an ICE restart): the caller sends a new offer, the person called a new answer
+          || (resource.data.status == 'accepted' && resource.data.from == myEmail()
+            && changed().hasOnly(['offer']) && validSdp(request.resource.data.offer, 'offer'))
+          || (resource.data.status == 'accepted' && resource.data.to == myEmail()
+            && changed().hasOnly(['answer']) && validSdp(request.resource.data.answer, 'answer'))
+          // the caller has put it in the chat ("Voice call · 4:12"), so it isn't logged twice
+          || (resource.data.from == myEmail() && resource.data.status in ['ended', 'missed', 'declined', 'busy']
+            && changed().hasOnly(['logged']) && request.resource.data.logged == true)
+        );
+        allow delete: if false;
+
+        // network routes (ICE candidates): each side writes only its own, while the call is live; either side
+        // clears them afterwards
+        function callData() { return get(/databases/$(database)/documents/chats/$(chatId)/calls/$(callId)).data; }
+        function validCandidate(d) {
+          return d.keys().hasOnly(['candidate', 'sdpMid', 'sdpMLineIndex', 'usernameFragment', 'createdAt'])
+            && d.candidate is string && d.candidate.size() <= 1000
+            && (!('sdpMid' in d) || d.sdpMid == null || (d.sdpMid is string && d.sdpMid.size() <= 64))
+            && (!('sdpMLineIndex' in d) || d.sdpMLineIndex == null || d.sdpMLineIndex is int)
+            && (!('usernameFragment' in d) || d.usernameFragment == null || (d.usernameFragment is string && d.usernameFragment.size() <= 256))
+            && d.createdAt == request.time;
+        }
+        match /callerCandidates/{candId} {
+          allow read, delete: if inCall();
+          allow create: if inCall() && callData().from == myEmail() && callData().status in ['ringing', 'accepted']
+            && validCandidate(request.resource.data);
+        }
+        match /calleeCandidates/{candId} {
+          allow read, delete: if inCall();
+          allow create: if inCall() && callData().to == myEmail() && callData().status in ['ringing', 'accepted']
+            && validCandidate(request.resource.data);
+        }
       }
     }
 

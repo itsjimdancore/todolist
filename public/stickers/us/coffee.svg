@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#000" flood-opacity=".28"/></filter></defs>
+<g filter="url(#sh)">
+<path d="M210 70q-20 30 0 60t0 60M262 60q-20 30 0 60t0 60M314 70q-20 30 0 60t0 60" stroke="#fff" stroke-width="12" fill="none" stroke-linecap="round" opacity=".9"/>
+<path d="M340 230h20a44 44 0 0 1 0 88h-26" stroke="#fff" stroke-width="42" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M340 230h20a44 44 0 0 1 0 88h-26" stroke="#0f6b5f" stroke-width="26" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M150 210h210v100a70 70 0 0 1-70 70h-70a70 70 0 0 1-70-70z" fill="#0f6b5f" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="16"/>
+<path d="M210 274q12-10 24 0M276 274q12-10 24 0" stroke="#fff" stroke-width="8" fill="none" stroke-linecap="round"/>
+<path transform="translate(256 316) scale(0.32)" d="M0 60C-70 15-95-20-80-50c14-28 55-35 80-5c25-30 66-23 80 5c15 30-10 65-80 110z" fill="#f2867a" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="43.8"/>
+<text x="256" y="470" text-anchor="middle" font-size="80" font-family="'Arial Rounded MT Bold','Nunito','Segoe UI Black','Segoe UI',Arial,sans-serif" font-weight="800" fill="#f0b45a" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="19" transform="rotate(-4 256 470)">Coffee?</text></g></svg>

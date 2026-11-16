@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#000" flood-opacity=".28"/></filter></defs>
+<g filter="url(#sh)"><path transform="translate(256 200) scale(2.5)" d="M0 60C-70 15-95-20-80-50c14-28 55-35 80-5c25-30 66-23 80 5c15 30-10 65-80 110z" fill="#f2867a" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="5.6"/>
+<circle cx="214" cy="190" r="16" fill="#fff"/><circle cx="298" cy="190" r="16" fill="#fff"/>
+<path d="M226 238q30 24 60 0" stroke="#fff" stroke-width="12" fill="none" stroke-linecap="round"/>
+<text x="256" y="450" text-anchor="middle" font-size="76" font-family="'Arial Rounded MT Bold','Nunito','Segoe UI Black','Segoe UI',Arial,sans-serif" font-weight="800" fill="#f2867a" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="18" transform="rotate(-4 256 450)">Love you</text></g></svg>

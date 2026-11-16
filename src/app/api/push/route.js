@@ -3,7 +3,7 @@
 // It only pushes notifications the caller just created themselves, each one once, to the devices of
 // the person it's for. Needs FIREBASE_SERVICE_ACCOUNT (the service-account JSON) set on the server.
 import { admin, caller as whoIs } from '@/lib/pushAdmin';
-import { deliver, deliverChat } from '@/lib/pushSend';
+import { deliver, deliverCall, deliverCallEnd, deliverChat } from '@/lib/pushSend';
 
 export const runtime = 'nodejs';
 
@@ -71,8 +71,36 @@ export async function POST(req) {
         return d;
       }).catch(() => null);
       const to = members.find((e) => e !== myEmail);
-      if (m && to) sent += await deliverChat(a, { chatId, to, fromName: chat.data().names?.[myEmail] || caller.name || myEmail.split('@')[0], text: m.audio ? '🎤 Voice message' : m.text }, origin);
+      if (m && to) sent += await deliverChat(a, { chatId, to, fromName: chat.data().names?.[myEmail] || caller.name || myEmail.split('@')[0], text: m.audio ? '🎤 Voice message' : m.sticker ? '🖼️ Sticker' : m.text }, origin);
     }
+  }
+
+  // a call I just started (body.call), or one that stopped ringing (body.callEnd): to the person called, once each
+  for (const [key, field] of [['call', 'ringPushedAt'], ['callEnd', 'endPushedAt']]) {
+    const cChat = typeof body[key]?.chatId === 'string' ? body[key].chatId : '';
+    const callId = typeof body[key]?.callId === 'string' ? body[key].callId : '';
+    if (!cChat || !callId || cChat.length >= 600 || callId.length >= 200) continue;
+    const chat = await a.db.collection('chats').doc(cChat).get().catch(() => null);
+    if (!chat?.exists || !(chat.data().members || []).includes(myEmail)) continue;
+    const ref = a.db.collection('chats').doc(cChat).collection('calls').doc(callId);
+    const call = await a.db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return null;
+      const d = snap.data();
+      if (d[field]) return null;
+      if (key === 'call') {
+        // only the caller, while it rings, within the first minute
+        const made = d.createdAt?.toMillis?.() ?? 0;
+        if (d.from !== myEmail || d.status !== 'ringing' || Date.now() - made > 60 * 1000) return null;
+      } else if (d.status === 'ringing' || !d.ringPushedAt) {
+        return null; // still ringing, or it never rang on their devices
+      }
+      tx.update(ref, { [field]: a.FieldValue.serverTimestamp() });
+      return d;
+    }).catch(() => null);
+    if (!call) continue;
+    const info = { chatId: cChat, callId, to: call.to, kind: call.kind, fromName: chat.data().names?.[call.from] || call.from.split('@')[0] };
+    sent += key === 'call' ? await deliverCall(a, info, origin) : await deliverCallEnd(a, { ...info, missed: call.status === 'missed' }, origin);
   }
 
   return Response.json({ sent });
