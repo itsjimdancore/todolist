@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#000" flood-opacity=".28"/></filter></defs>
+<g filter="url(#sh)"><circle cx="256" cy="200" r="140" fill="#f6c453" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="16"/>
+<path d="M184 178l34 18-34 18M328 178l-34 18 34 18" stroke="#06211d" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M180 244h152a76 76 0 0 1-152 0z" fill="#06211d"/><path d="M212 290q44 22 88 0a76 76 0 0 1-88 0z" fill="#f2867a"/>
+<path d="M124 196q-30 30-10 54q24-6 18-40z" fill="#5aa9e6" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="8"/>
+<text x="256" y="450" text-anchor="middle" font-size="100" font-family="'Arial Rounded MT Bold','Nunito','Segoe UI Black','Segoe UI',Arial,sans-serif" font-weight="800" fill="#f0b45a" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="24" transform="rotate(-4 256 450)">Haha</text></g></svg>

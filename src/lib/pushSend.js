@@ -22,7 +22,7 @@ export async function deliverChat(a, msg, origin) {
   }
   if (!wanted.length) return 0;
   const name = (msg.fromName || 'Someone').slice(0, 60);
-  const text = String(msg.text || '').replace(/s+/g, ' ').trim();
+  const text = String(msg.text || '').replace(/\s+/g, ' ').trim();
   const replyToken = makeReplyToken({ email: msg.to, chatId: msg.chatId });
   const res = await a.messaging.sendEachForMulticast({
     tokens: wanted,
@@ -37,6 +37,55 @@ export async function deliverChat(a, msg, origin) {
   await Promise.all(res.responses.map((r, i) =>
     !r.success && DEAD_TOKEN.has(r.error?.code) ? a.db.collection('pushTokens').doc(wanted[i]).delete().catch(() => {}) : null));
   return res.successCount;
+}
+
+// the devices of `to` that want chat notifications (calls follow the chat setting)
+async function chatDevices(a, to) {
+  const tokens = await a.db.collection('pushTokens').where('email', '==', to).get();
+  const prefs = new Map();
+  const wanted = [];
+  for (const t of tokens.docs) {
+    const uid = t.data().uid;
+    if (!prefs.has(uid)) prefs.set(uid, await a.db.collection('users').doc(uid).get().then((s) => s.data()?.notify || {}).catch(() => ({})));
+    if (wantsPush(prefs.get(uid), 'chat')) wanted.push(t.id);
+  }
+  return wanted;
+}
+async function sendTo(a, tokens, data, ttl) {
+  if (!tokens.length) return 0;
+  const res = await a.messaging.sendEachForMulticast({ tokens, data, webpush: { headers: { Urgency: 'high', TTL: String(ttl) } } }).catch(() => null);
+  if (!res) return 0;
+  await Promise.all(res.responses.map((r, i) =>
+    !r.success && DEAD_TOKEN.has(r.error?.code) ? a.db.collection('pushTokens').doc(tokens[i]).delete().catch(() => {}) : null));
+  return res.successCount;
+}
+const callTag = (callId) => `call-${String(callId).slice(0, 60)}`;
+
+// Someone is calling: ring the other person's devices. It stays on screen until they answer or decline (where the
+// system allows), with Answer and Decline buttons. It's only worth delivering while it rings, so it expires
+// after 45 seconds. call: { chatId, callId, to, fromName, kind }
+export async function deliverCall(a, call, origin) {
+  const wanted = await chatDevices(a, call.to);
+  const name = (call.fromName || 'Someone').slice(0, 60);
+  const declineToken = makeReplyToken({ email: call.to, chatId: call.chatId });
+  return sendTo(a, wanted, {
+    type: 'call', title: name, body: call.kind === 'video' ? 'Incoming video call' : 'Incoming voice call',
+    tag: callTag(call.callId), callId: call.callId, kind: call.kind,
+    link: `${origin}/?chat=1&call=${encodeURIComponent(call.callId)}`,
+    ...(declineToken ? { declineToken, declineUrl: `${origin}/api/call-decline` } : {}),
+  }, 45);
+}
+
+// The call stopped ringing (answered, declined, or the caller gave up): take the ringing notification away from
+// the called person's devices. missed: put "Missed voice call" in its place.
+export async function deliverCallEnd(a, call, origin) {
+  const wanted = await chatDevices(a, call.to);
+  const name = (call.fromName || 'Someone').slice(0, 60);
+  return sendTo(a, wanted, {
+    type: 'call-end', tag: callTag(call.callId), title: name, missed: call.missed ? '1' : '',
+    body: call.missed ? (call.kind === 'video' ? 'Missed video call' : 'Missed voice call') : '',
+    link: `${origin}/?chat=1`,
+  }, 120);
 }
 
 // a: admin(); items: [{ col, id, doc }]; origin: where the links should open; senderEmail: who caused them

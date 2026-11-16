@@ -1,12 +1,16 @@
 'use client';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  MAX_MESSAGE, MAX_VOICE_B64, MAX_VOICE_SECS, VOICE_PREVIEW,
-  deleteMessage, editMessage, emailOf, markChatRead, nameOf, sendMessage, sendVoiceNote, setTyping, startChat, watchPerson,
+  MAX_MESSAGE, MAX_VOICE_B64, MAX_VOICE_SECS, STICKER_PREVIEW, VOICE_PREVIEW,
+  deleteMessage, editMessage, emailOf, markChatRead, nameOf, sendMessage, sendSticker, sendVoiceNote, setTyping, startChat, watchPerson,
 } from '@/lib/data';
 import { friendlyError } from '@/lib/firebase';
 import { EMAIL_RE, roleLabel } from '@/lib/permissions';
 import { Avatar, colorFor, displayName, nickOf, toDate } from '@/lib/people';
+import { stickerLabel, stickerOf, stickerSrc } from '@/lib/stickerPacks';
+import { setFav, touchSticker, useMyStickers } from '@/lib/stickers';
+import { callPreview, callText } from '@/lib/calls';
+import { CallIcon } from './CallScreen';
 import BackLink from './BackLink';
 import EmojiPicker from './EmojiPicker';
 import Loading, { Spinner } from './Loading';
@@ -56,13 +60,16 @@ function listTime(ts) {
 
 // Only emoji (a few): shown big, like WhatsApp
 const EMOJI_ONLY = /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|‍|️|\s)+$/u;
+// a message as one line: a voice note or a sticker by what it is, otherwise its text
+const previewOf = (m) => (m.audio ? VOICE_PREVIEW : m.sticker ? STICKER_PREVIEW : m.call ? callPreview(m.call) : m.text);
+const quoteOf = (m) => ({ id: m.id, text: previewOf(m).slice(0, 300), from: m.from });
 const bigEmoji = (t) => EMOJI_ONLY.test(t) && !/\d|#|\*/.test(t) && [...t.replace(/\s|‍|️/g, '')].length <= 6;
 
 // ---- search: messages whose text contains q (any case); the text split around each match
 export const matchesOf = (messages, q) => {
   const t = q.trim().toLowerCase();
   if (!t) return [];
-  return (messages || []).filter((m) => !m.deleted && !m.audio && m.text.toLowerCase().includes(t));
+  return (messages || []).filter((m) => !m.deleted && !m.audio && !m.sticker && !m.call && m.text.toLowerCase().includes(t));
 };
 export function splitMatch(text, q) {
   const t = q.trim().toLowerCase();
@@ -145,7 +152,7 @@ function DotsMenu({ items, label }) {
 //   computers: the Chats list on the left, the open conversation on the right (a welcome panel until one is opened)
 //   phones: the Chats list, then the conversation as the next page (‹ or the phone's Back returns to the list)
 // lists: my lists and letters (for "Lists you share" in Contact info) · onOpenList(id): open one of them
-export default function Chat({ api, user, contacts, back, lists = [], onOpenList }) {
+export default function Chat({ api, calls, user, contacts, back, lists = [], onOpenList }) {
   const toast = useToast();
   const fromNote = () => new URLSearchParams(window.location.search).get('chat') === '1'; // opened from a notification
   const [inConv, setInConv] = useState(fromNote); // phones: the conversation page is showing
@@ -197,7 +204,7 @@ export default function Chat({ api, user, contacts, back, lists = [], onOpenList
       onNewChat={() => toast(`This is your private chat with ${name}. Only two people can chat here.`, 'info')} />
   );
   const conv = (showBack) => (
-    <Conversation key="conv" api={api} user={user} person={person} name={name} showBack={showBack}
+    <Conversation key="conv" api={api} calls={calls} user={user} person={person} name={name} showBack={showBack}
       back={{ label: 'Chats', onClick: closeConv }} jumpTo={jumpTo} onJumped={() => setJumpTo(null)}
       onInfo={() => setInfo(true)} />
   );
@@ -422,7 +429,7 @@ function StartChat({ user, contacts, back }) {
   );
 }
 
-function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumped, onInfo }) {
+function Conversation({ api, calls, user, person, name, showBack, back, jumpTo, onJumped, onInfo }) {
   const toast = useToast();
   const { chat, chatId, other, me, messages, hasMore, loadMore } = api;
   const [, tick] = useState(0);
@@ -471,7 +478,7 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
       const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
       if (!b64) throw new Error('the recording came out empty');
       if (b64.length > MAX_VOICE_B64) { toast('That voice note is too big to send. Try a shorter one.', 'err'); setSending(false); return; }
-      const q = replyRef.current ? { id: replyRef.current.id, text: (replyRef.current.audio ? VOICE_PREVIEW : replyRef.current.text).slice(0, 300), from: replyRef.current.from } : null;
+      const q = replyRef.current ? quoteOf(replyRef.current) : null;
       setReply(null);
       await sendVoiceNote(chatId, user, {
         data: b64,
@@ -628,6 +635,42 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
       setTyping(chatId, user, false).catch(() => {});
     }
   }
+  // ---- stickers: my favourites and recents (in my account, on every device)
+  const mine = useMyStickers(user.uid);
+  // a sticker from the panel: sent at once (the panel stays open, like WhatsApp), and to the top of my recents
+  async function sendStickerMsg(s) {
+    const r = reply ? quoteOf(reply) : null;
+    if (editing) { setEditing(null); setText(''); }
+    setReply(null);
+    const st = stickerOf(s);
+    try {
+      await sendSticker(chatId, user, st, r);
+    } catch (er) {
+      toast(`Sticker not sent: ${friendlyError(er)}`, 'err');
+      return false;
+    }
+    touchSticker(user.uid, st, mine.docs).catch(() => {});
+    return true;
+  }
+  async function favSticker(s, on) {
+    setMenu(null);
+    const st = stickerOf(s);
+    try {
+      await setFav(user.uid, st, on, mine.docs);
+    } catch (er) {
+      return toast(friendlyError(er), 'err');
+    }
+    const id = toast({
+      title: on ? 'Added to favourites' : 'Removed from favourites',
+      action: { label: 'Undo', onClick() { setFav(user.uid, st, !on, mine.docs).catch(() => {}); toast.close(id); } },
+    });
+  }
+  // made from a photo: kept in Favourites, then sent
+  async function sendMade(s) {
+    await setFav(user.uid, s, true, mine.docs).catch(() => {});
+    if (!(await sendStickerMsg(s))) throw new Error('The sticker was saved in your Favourites, but not sent. Try again from there.');
+  }
+  const stickerPanel = { mine, onSend: sendStickerMsg, onFav: favSticker, onMade: sendMade };
   // an emoji from the picker, where the cursor is
   function insert(e) {
     const el = input.current;
@@ -655,7 +698,7 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
         if (v !== editing.text) await editMessage(chatId, editing.id, v);
         setEditing(null);
       } else {
-        const r = reply ? { id: reply.id, text: (reply.audio ? VOICE_PREVIEW : reply.text).slice(0, 300), from: reply.from } : null;
+        const r = reply ? quoteOf(reply) : null;
         setText('');
         setReply(null);
         lastTyping.current = 0;
@@ -707,6 +750,7 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
     return out;
   }, [messages]);
 
+  const byId = useMemo(() => new Map((messages || []).map((m) => [m.id, m])), [messages]);
   const status = typing ? 'typing…' : seenLabel(person);
   const menuMsg = menu && (messages || []).find((x) => x.id === menu.id);
   const current = finding && found.length ? found[found.length - 1 - fi].id : null;
@@ -726,6 +770,14 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
           </span>
         </button>
         <span className="wa-icons">
+          {calls && (
+            <>
+              <button type="button" className="wa-ic" onClick={() => calls.start('video')} disabled={calls.active}
+                aria-label={`Video call ${name}`} title="Video call"><CallIcon name="video" size={22} /></button>
+              <button type="button" className="wa-ic" onClick={() => calls.start('voice')} disabled={calls.active}
+                aria-label={`Voice call ${name}`} title="Voice call"><CallIcon name="phone" size={21} /></button>
+            </>
+          )}
           <button type="button" className={finding ? 'wa-ic on' : 'wa-ic'} onClick={() => (finding ? closeFind() : setFinding(true))}
             aria-label="Search messages" title="Search messages"><Svg name="search" /></button>
           <DotsMenu label="Chat menu" items={[
@@ -763,7 +815,7 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
           ) : (
             <Bubble key={r.key} m={r.m} first={r.first} last={r.last} mine={r.m.from === me} name={name} me={me}
               who={r.m.from === me ? { email: me, displayName: nameOf(user), photoURL: user.photoURL || '' } : { email: other, displayName: name, photoURL: person?.photoURL || '' }}
-              tick={tickState(r.m, theirDelivered, theirRead)} q={finding ? fq : ''} current={current === r.m.id}
+              tick={tickState(r.m, theirDelivered, theirRead)} q={finding ? fq : ''} quoted={r.m.reply ? byId.get(r.m.reply.id) : null} calls={calls} current={current === r.m.id}
               onMenu={(x, y) => setMenu({ id: r.m.id, x, y })} onReply={() => startReply(r.m)} onJump={jump} />
           )))}
           {/* their typing: a status marker under the last message, the words shimmering */}
@@ -782,8 +834,13 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
       {menuMsg && (
         <div className="msg-menu" role="menu" style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 220) }}>
           {!menuMsg.deleted && <button type="button" role="menuitem" onClick={() => startReply(menuMsg)}>Reply</button>}
-          {!menuMsg.deleted && !menuMsg.audio && <button type="button" role="menuitem" onClick={() => copy(menuMsg)}>Copy</button>}
-          {menuMsg.from === me && !menuMsg.deleted && !menuMsg.audio && Date.now() - ms(menuMsg.createdAt) < EDIT_MINS * 60000 && (
+          {!menuMsg.deleted && menuMsg.sticker && (
+            <button type="button" role="menuitem" onClick={() => favSticker(menuMsg.sticker, !mine.isFav(menuMsg.sticker))}>
+              {mine.isFav(menuMsg.sticker) ? 'Remove from favourites' : 'Add to favourites'}
+            </button>
+          )}
+          {!menuMsg.deleted && !menuMsg.audio && !menuMsg.sticker && !menuMsg.call && <button type="button" role="menuitem" onClick={() => copy(menuMsg)}>Copy</button>}
+          {menuMsg.from === me && !menuMsg.deleted && !menuMsg.audio && !menuMsg.sticker && !menuMsg.call && Date.now() - ms(menuMsg.createdAt) < EDIT_MINS * 60000 && (
             <button type="button" role="menuitem" onClick={() => startEdit(menuMsg)}>Edit</button>
           )}
           {menuMsg.from === me && !menuMsg.deleted && (confirmDel === menuMsg.id ? (
@@ -795,13 +852,14 @@ function Conversation({ api, user, person, name, showBack, back, jumpTo, onJumpe
       )}
 
       <form className="chat-compose" onSubmit={submit}>
-        {emoji && <EmojiPicker onPick={insert} onClose={() => setEmoji(false)} />}
+        {emoji && <EmojiPicker onPick={insert} stickers={stickerPanel} onClose={() => setEmoji(false)} />}
         {(reply || editing) && (
           <div className="chat-bar">
             <div className="chat-bar-b">
               <b>{editing ? 'Edit message' : reply.from === me ? 'You' : name}</b>
-              <span>{(editing || reply).audio ? VOICE_PREVIEW : (editing || reply).text}</span>
+              <span>{previewOf(editing || reply)}</span>
             </div>
+            {reply?.sticker && <img className="chat-bar-stk" src={stickerSrc(reply.sticker)} alt="" />}
             <button type="button" className="ic" onClick={cancelBar} aria-label="Cancel">✕</button>
           </div>
         )}
@@ -914,12 +972,13 @@ function VoiceNote({ audio }) {
 
 // One message. Long-press (phones) or the ⌄ (computers) for Reply / Copy / Edit / Delete; swipe right to reply.
 // q: the in-chat search (matches highlighted) · current: the match being shown
-function Bubble({ m, first, last, mine, name, me, who, tick, q, current, onMenu, onReply, onJump }) {
+function Bubble({ m, first, last, mine, name, me, who, tick, q, current, quoted, calls, onMenu, onReply, onJump }) {
   const d = toDate(m.createdAt);
   const press = useRef(null);
   const [dx, setDx] = useState(0);
-  const big = !m.deleted && !m.audio && !q && bigEmoji(m.text);
-  const hit = q && !m.deleted && !m.audio && m.text.toLowerCase().includes(q.trim().toLowerCase()) && q.trim();
+  const sticker = !m.deleted && m.sticker;
+  const big = !m.deleted && !m.audio && !sticker && !m.call && !q && bigEmoji(m.text);
+  const hit = q && !m.deleted && !m.audio && !sticker && !m.call && m.text.toLowerCase().includes(q.trim().toLowerCase()) && q.trim();
 
   const down = (e) => {
     if (e.target.closest('a, button')) return;
@@ -949,19 +1008,26 @@ function Bubble({ m, first, last, mine, name, me, who, tick, q, current, onMenu,
       className={['cm', mine ? 'cm-mine' : 'cm-theirs', first && 'cm-first', last && 'cm-last', current && 'cm-current'].filter(Boolean).join(' ')}>
       <div className="cm-av">{last && <Avatar person={who} size={28} title={false} />}</div>
       <div className="cm-col">
-        <div className={['cm-b', big && 'cm-big', m.deleted && 'cm-deleted'].filter(Boolean).join(' ')}
+        <div className={['cm-b', big && 'cm-big', sticker && 'cm-sticker', m.deleted && 'cm-deleted'].filter(Boolean).join(' ')}
           title={clock(d)}
           style={dx ? { transform: `translateX(${dx}px)` } : undefined}
           onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
           onContextMenu={(e) => { e.preventDefault(); onMenu(e.clientX, e.clientY); }}>
           {m.reply && !m.deleted && (
             <button type="button" className="cm-quote" onClick={() => onJump(m.reply.id)}>
-              <b>{m.reply.from === me ? 'You' : name}</b>
-              <span>{m.reply.text}</span>
+              <span className="cm-quote-b">
+                <b>{m.reply.from === me ? 'You' : name}</b>
+                <span>{m.reply.text}</span>
+              </span>
+              {quoted?.sticker && !quoted.deleted && <img className="cm-quote-stk" src={stickerSrc(quoted.sticker)} alt="" />}
             </button>
           )}
           {m.deleted ? (
             <span className="cm-t">🚫 {mine ? 'You deleted this message' : 'This message was deleted'}</span>
+          ) : m.call ? (
+            <CallLine c={m.call} mine={mine} calls={calls} />
+          ) : sticker ? (
+            <img className="cm-stk" src={stickerSrc(m.sticker)} alt={stickerLabel(m.sticker)} width={160} height={160} draggable={false} />
           ) : m.audio ? (
             <VoiceNote audio={m.audio} />
           ) : (
@@ -985,6 +1051,20 @@ function Bubble({ m, first, last, mine, name, me, who, tick, q, current, onMenu,
         )}
       </div>
     </div>
+  );
+}
+
+// A call in the chat: "Voice call · 4:12", "Missed video call", with Call back
+function CallLine({ c, mine, calls }) {
+  const missed = !mine && c.status !== 'ended';
+  return (
+    <span className="cm-call">
+      <span className={missed ? 'cm-call-ic missed' : 'cm-call-ic'}><CallIcon name={c.kind === 'video' ? 'video' : 'phone'} size={18} /></span>
+      <span className="cm-call-t">{callText(c, mine)}</span>
+      {calls && (
+        <button type="button" className="cm-call-back" onClick={() => calls.start(c.kind)} disabled={calls.active}>Call back</button>
+      )}
+    </span>
   );
 }
 

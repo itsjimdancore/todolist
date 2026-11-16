@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#000" flood-opacity=".28"/></filter></defs>
+<g filter="url(#sh)">
+<circle cx="256" cy="210" r="140" fill="#0f6b5f" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="16"/>
+<path d="M190 214l46 46 92-98" stroke="#fff" stroke-width="34" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path transform="translate(410 100) scale(1.5)" d="M0-20C3-6 6-3 20 0C6 3 3 6 0 20C-3 6-6 3-20 0C-6-3-3-6 0-20z" fill="#f0b45a"/><path transform="translate(96 300) scale(1.1)" d="M0-20C3-6 6-3 20 0C6 3 3 6 0 20C-3 6-6 3-20 0C-6-3-3-6 0-20z" fill="#8fe3d3"/>
+<text x="256" y="446" text-anchor="middle" font-size="96" font-family="'Arial Rounded MT Bold','Nunito','Segoe UI Black','Segoe UI',Arial,sans-serif" font-weight="800" fill="#0f6b5f" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="23" transform="rotate(-4 256 446)">Done!</text></g></svg>

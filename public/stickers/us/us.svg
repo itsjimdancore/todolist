@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#000" flood-opacity=".28"/></filter></defs>
+<g filter="url(#sh)"><g transform="translate(46 30) scale(6.6)">
+<path d="M20 5h24a15 15 0 0 1 15 15v17a15 15 0 0 1-15 15H27l-13 8.5 2.4-10A15 15 0 0 1 5 37V20A15 15 0 0 1 20 5z" fill="#0f6b5f" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="2.42"/>
+<path d="M19 30.5l9.5 9.5" stroke="#8fe3d3" stroke-width="6.5" stroke-linecap="round"/>
+<path d="M28.5 40L45 23.5" stroke="#fff" stroke-width="6.5" stroke-linecap="round"/>
+<circle cx="14.6" cy="24.6" r="4" fill="#8fe3d3"/><circle cx="50.2" cy="17.4" r="4.2" fill="#fff"/></g></g></svg>

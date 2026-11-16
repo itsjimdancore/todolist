@@ -46,6 +46,9 @@ import Board from './Board';
 import Unplaced from './Unplaced';
 import Chat from './Chat';
 import { useChat } from '@/lib/useChat';
+import { useCall } from '@/lib/useCall';
+import CallScreen from './CallScreen';
+import IncomingCall from './IncomingCall';
 import { useCalendarsSharedWithMe, useMyCalendarShares } from '@/lib/useSharedCalendars';
 import Calendar, { dueNowCount, taskEntries, useAllTasks } from './Calendar';
 import Emblem from './Emblem';
@@ -187,6 +190,10 @@ function WorkspaceInner({ user }) {
 
   // ---- the private chat, live everywhere (the sidebar shows how many messages are unread)
   const chatApi = useChat(user);
+  // ---- voice and video calls: they ring on every page, and carry on while you move around the app
+  const callApi = useCall(user, chatApi);
+  const callWith = chatApi.other;
+  const callName = callWith ? nickOf(callWith) || chatApi.chat?.names?.[callWith] || callWith.split('@')[0] : '';
 
   // ---- calendars: who I've shared mine with, and the ones shared with me (with their lists)
   const calShares = useMyCalendarShares(user.uid);
@@ -334,6 +341,8 @@ function WorkspaceInner({ user }) {
     if (activeId) url.searchParams.set('list', activeId);
     url.searchParams.delete('reply'); // used once, on arrival from a comment's device notification
     url.searchParams.delete('chat'); // likewise, from a chat message's
+    url.searchParams.delete('call'); // a call's notification (useCall reads them on the first render)
+    url.searchParams.delete('answer');
     if (['board', 'calendar', 'notifications', 'letters', 'music', 'chat', 'partner'].includes(view)) url.searchParams.set('view', view);
     else url.searchParams.delete('view');
     const n = nav.current;
@@ -654,7 +663,7 @@ function WorkspaceInner({ user }) {
           <Calendar lists={calLists} byList={allTasks} user={user} onOpen={pick}
             shares={calShares} withMe={calsWithMe} contacts={contacts} />
         ) : view === 'chat' ? (
-          <Chat api={chatApi} user={user} contacts={contacts} back={back} lists={lists || []} onOpenList={pick} />
+          <Chat api={chatApi} calls={callApi} user={user} contacts={contacts} back={back} lists={lists || []} onOpenList={pick} />
         ) : view === 'music' ? (
           <Music user={user} music={music} nowPlaying={nowPlaying || ''}
             partner={partner ? { name: partnerFirst, music: partnerMusic } : null} />
@@ -692,6 +701,14 @@ function WorkspaceInner({ user }) {
           </div>
         )}
       </main>
+
+      {callApi.incoming && (
+        <IncomingCall call={callApi.incoming} name={callName} onAnswer={callApi.answer} onDecline={callApi.decline} />
+      )}
+      {callApi.state && (
+        <CallScreen state={callApi.state} session={callApi.session} name={callName} other={callWith}
+          onHangUp={callApi.hangUp} onDismiss={callApi.dismiss} />
+      )}
 
       {/* someone added me as their partner: offer to share mine back in one tap (not on the Partner page itself) */}
       {lists !== null && view !== 'partner' && <PartnerPrompt user={user} api={partnerApi} />}

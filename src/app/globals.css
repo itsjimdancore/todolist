@@ -2495,7 +2495,16 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 .cm-mine .cm-more { color: var(--mine-ink); }
 .cm-b:hover .cm-more, .cm-more:focus-visible { opacity: 1; }
 .cm-big .cm-more { background: rgb(11 20 26 / .55); color: #e9edef; }
-.cm-quote { display: flex; flex-direction: column; width: 100%; min-width: 160px; margin: 2px 0 6px; padding: 5px 10px; border: none;
+/* a sticker: no bubble behind it, like WhatsApp; a quote above it keeps a solid card so it reads on the wallpaper */
+.cm-b.cm-sticker { background: none !important; padding: 0; }
+.cm-stk { display: block; width: 160px; height: 160px; object-fit: contain; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.cm-sticker .cm-more { background: rgb(11 20 26 / .55); color: #e9edef; }
+.cm-sticker .cm-quote { width: 160px; min-width: 0; background: var(--theirs); }
+.cm-mine .cm-sticker .cm-quote { background: var(--mine); color: var(--mine-ink); }
+.cm-quote { align-items: center; gap: 8px; }
+.cm-quote .cm-quote-b { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: visible; color: inherit; font-size: inherit; }
+.cm-quote-stk { flex: none; width: 40px; height: 40px; object-fit: contain; }
+.cm-quote { display: flex; flex-direction: row; width: 100%; min-width: 160px; margin: 2px 0 6px; padding: 5px 10px; border: none;
   border-left: 3px solid #06cf9c; border-radius: 10px; background: rgb(11 20 26 / .28); text-align: left; color: inherit; cursor: pointer; }
 .cm-mine .cm-quote { border-left-color: var(--mine-ink); background: rgb(6 33 29 / .14); }
 .cm-quote b { font-size: 12.5px; color: #06cf9c; }
@@ -2532,6 +2541,7 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 .chat-bar-b { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .chat-bar-b b { font-size: 12.5px; color: #06cf9c; }
 .chat-bar-b span { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-bar-stk { flex: none; width: 44px; height: 44px; object-fit: contain; }
 .chat-row { display: flex; align-items: flex-end; gap: 8px; }
 .chat-in { flex: 1; min-width: 0; min-height: 42px; max-height: 160px; padding: 10px 14px; border: none; border-radius: 21px; background: #2a3942;
   color: var(--fg); font: inherit; font-size: 15px; line-height: 1.4; resize: none; field-sizing: content; overflow-y: auto; }
@@ -2707,6 +2717,36 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 .emo-e { height: 40px; border: none; border-radius: 8px; background: none; font-size: 26px; line-height: 1; cursor: pointer; }
 .emo-e:hover { background: rgb(255 255 255 / .08); }
 .emo-none { grid-column: 1 / -1; margin: 20px; text-align: center; color: var(--wa-muted); font-size: 14px; }
+/* Emoji | Stickers, at the bottom of the panel */
+.emo-switch { flex: none; display: flex; justify-content: center; gap: 6px; padding: 6px; border-top: 1px solid var(--wa-line); }
+.emo-switch button { height: 30px; padding: 0 16px; border: none; border-radius: 15px; background: none; color: var(--wa-muted); font-family: var(--mono); font-size: 13px; font-weight: 600; cursor: pointer; }
+.emo-switch button:hover { color: #e9edef; }
+.emo-switch button.on { background: var(--wa-head); color: #e9edef; }
+.stk-tabs { justify-content: flex-start; gap: 2px; }
+.stk-tabs img { display: block; margin: auto; }
+.stk-grid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 4px; padding: 0 8px 8px; align-content: start; }
+.stk { aspect-ratio: 1; padding: 6px; border: none; border-radius: 10px; background: none; cursor: pointer; transition: transform .1s; }
+.stk:hover { background: rgb(255 255 255 / .06); }
+.stk:active { transform: scale(.94); }
+.stk img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.stk-star { color: #f0b45a; }
+.stk-hint { opacity: .75; }
+.stk { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+/* ＋ make a sticker from a photo */
+.stk-make { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 12px 10px; }
+.stk-make .emo-h { align-self: stretch; }
+.stk-make-start { margin: auto; max-width: 300px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; color: var(--wa-muted); font-size: 14px; }
+.stk-make-start p { margin: 0; }
+.stk-crop { flex: none; border-radius: 12px; background: #0b141a; touch-action: none; cursor: grab; box-shadow: 0 0 0 2px var(--wa-green); }
+.stk-crop:active { cursor: grabbing; }
+.stk-zoom { width: 220px; accent-color: var(--wa-green); }
+.stk-make-row { display: flex; gap: 8px; }
+.stk-btn { height: 34px; padding: 0 16px; border: 1px solid var(--wa-line); border-radius: 17px; background: none; color: #e9edef; font-family: var(--mono); font-size: 13px; font-weight: 600; cursor: pointer; }
+.stk-btn.primary { border-color: var(--wa-green); background: var(--wa-green); color: #0b141a; }
+.stk-btn:disabled { opacity: .6; cursor: default; }
+.stk-err { margin: 0; color: var(--danger); font-size: 13px; text-align: center; }
+/* room for the whole crop screen (square, zoom, buttons) without scrolling */
+.emo:has(.stk-crop) { height: min(440px, calc(100dvh - 140px)); }
 
 /* contact info */
 .chat-info { min-height: 0; display: flex; flex-direction: column; background: var(--wa-panel); border-left: 1px solid var(--wa-line); }
@@ -2738,6 +2778,7 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
   .chat-item { padding: 10px 14px; }
   .chat-info { border-left: none; }
   .emo { left: 0; right: 0; width: 100%; bottom: 100%; border-radius: 14px 14px 0 0; height: 300px; }
+  .emo:has(.stk-crop) { height: min(440px, calc(100dvh - 140px)); }
   .chat-h { min-height: 56px; padding: 6px 8px !important; }
   .chat-h-who { gap: 10px; }
 }
@@ -2875,3 +2916,54 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
   .partner-prompt .m-f { flex-direction: column-reverse; }
   .partner-prompt .m-f .btn { width: 100%; height: 46px; }
 }
+/* ---------- calls ---------- */
+/* the call line in the chat: "Voice call · 4:12", Call back */
+.cm-call { display: flex; align-items: center; gap: 10px; min-width: min(240px, 62vw); padding: 2px 0; }
+.cm-call-ic { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: rgb(0 0 0 / .18); }
+.cm-call-ic.missed { color: #f15c6d; }
+.cm-call-t { flex: 1; min-width: 0; }
+.cm-call-back { flex: none; height: 28px; padding: 0 10px; border: none; border-radius: 14px; background: rgb(0 0 0 / .18); color: inherit; font-family: var(--mono); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.cm-call-back:hover { background: rgb(0 0 0 / .28); }
+.cm-call-back:disabled, .wa-ic:disabled { opacity: .45; cursor: default; }
+
+/* full screen, over everything: the call, and someone calling */
+.call, .call-in { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; color: #e9edef;
+  background: radial-gradient(ellipse at 50% 30%, #1d3a36 0%, #0b141a 70%); overflow: hidden; touch-action: none; }
+.call-remote { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.call-top { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: max(12vh, 56px); padding: 0 24px; text-align: center; }
+.call-top h2, .call-in-who h2 { margin: 14px 0 0; font-size: 26px; font-weight: 500; }
+.call-status { margin: 0; font-family: var(--mono); font-size: 15px; color: rgb(233 237 239 / .8); font-variant-numeric: tabular-nums; }
+.call-error { margin: 8px 0 0; max-width: 340px; color: #ffb4ab; font-size: 14.5px; }
+.call-note { margin: 8px 0 0; max-width: 320px; padding: 8px 12px; border-radius: 10px; background: rgb(0 0 0 / .3); color: rgb(233 237 239 / .85); font-size: 13.5px; }
+/* over their video: just the name and timer, small, at the top */
+.call-has-video .call-top { margin-top: max(env(safe-area-inset-top), 16px); }
+.call-has-video .call-top h2 { margin: 0; font-size: 18px; text-shadow: 0 1px 6px rgb(0 0 0 / .7); }
+.call-has-video .call-status { text-shadow: 0 1px 6px rgb(0 0 0 / .7); }
+.call-local { position: absolute; z-index: 2; width: 120px; height: 200px; object-fit: cover; border-radius: 14px; background: #111;
+  box-shadow: 0 6px 20px rgb(0 0 0 / .5); cursor: grab; touch-action: none; transition: top .2s, right .2s; }
+.call-local.mirror { transform: scaleX(-1); }
+.call-local.off { opacity: 0; }
+.call-btns { position: absolute; z-index: 3; left: 0; right: 0; bottom: max(env(safe-area-inset-bottom), 28px); display: flex; justify-content: center; gap: 18px; }
+.call-btn { display: grid; place-items: center; width: 60px; height: 60px; padding: 0; border: none; border-radius: 50%;
+  background: rgb(255 255 255 / .16); color: #fff; cursor: pointer; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: transform .1s, background .15s; }
+.call-btn:hover { background: rgb(255 255 255 / .24); }
+.call-btn:active { transform: scale(.94); }
+.call-btn.on { background: #e9edef; color: #0b141a; }
+.call-btn.end { background: #f15c6d; }
+.call-btn.end:hover { background: #e04757; }
+.call-btn.answer { background: #00a884; }
+.call-btn.answer:hover { background: #029072; }
+.call-close { height: 44px; padding: 0 28px; border: none; border-radius: 22px; background: #e9edef; color: #0b141a; font-family: var(--mono); font-size: 15px; font-weight: 600; cursor: pointer; }
+/* their photo, breathing while it rings */
+.call-pulse { position: relative; border-radius: 50%; }
+.call-pulse::before, .call-pulse::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgb(143 227 211 / .5); animation: call-ring 2s ease-out infinite; }
+.call-pulse::after { animation-delay: 1s; }
+@keyframes call-ring { from { transform: scale(1); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .call-pulse::before, .call-pulse::after { animation: none; opacity: 0; } }
+/* someone is calling */
+.call-in { justify-content: space-between; padding: max(14vh, 60px) 24px max(env(safe-area-inset-bottom), 48px); }
+.call-in-who { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.call-in-who p { margin: 0; font-family: var(--mono); font-size: 16px; color: rgb(233 237 239 / .8); }
+.call-in-btns { display: flex; justify-content: center; gap: min(30vw, 120px); }
+.call-btn-l { display: flex; flex-direction: column; align-items: center; gap: 10px; font-family: var(--mono); font-size: 14px; color: rgb(233 237 239 / .85); }
+.call-btn-l .call-btn { width: 68px; height: 68px; }

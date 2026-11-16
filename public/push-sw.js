@@ -28,6 +28,42 @@ self.addEventListener('push', (event) => {
   }
   if (!msg.title) return;
 
+  // a call ringing: it stays until answered or declined (where the system allows), with Answer and Decline buttons.
+  // Someone looking at the app right now gets the app's own ringing screen instead.
+  if (msg.type === 'call') {
+    event.waitUntil((async () => {
+      const open = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      if (open.some((c) => c.focused && c.visibilityState === 'visible')) return;
+      await self.registration.showNotification(msg.title, {
+        body: msg.body || 'Incoming call',
+        icon: '/icons/emblem-192.png',
+        badge: '/icons/badge-72.png',
+        tag: msg.tag,
+        renotify: true,
+        requireInteraction: true,
+        silent: false,
+        vibrate: [600, 300, 600, 300, 600, 300, 600],
+        actions: [{ action: 'answer', title: 'Answer' }, { action: 'decline', title: 'Decline' }],
+        data: { type: 'call', link: msg.link || '/?chat=1', callId: msg.callId || '', declineToken: msg.declineToken || '', declineUrl: msg.declineUrl || '', tag: msg.tag },
+      });
+    })());
+    return;
+  }
+  // the call stopped ringing (answered somewhere, declined, or they gave up): take it away, or say it was missed
+  if (msg.type === 'call-end') {
+    event.waitUntil((async () => {
+      const shown = await self.registration.getNotifications({ tag: msg.tag });
+      shown.forEach((n) => n.close());
+      if (msg.missed === '1') {
+        await self.registration.showNotification(msg.title, {
+          body: msg.body || 'Missed call', icon: '/icons/emblem-192.png', badge: '/icons/badge-72.png', tag: msg.tag,
+          renotify: false, silent: true, data: { link: msg.link || '/?chat=1' },
+        });
+      }
+    })());
+    return;
+  }
+
   // a chat message reached this device: "delivered" (the sender sees grey double ticks), like WhatsApp
   if (msg.tag && msg.tag.startsWith('chat-') && msg.replyToken) {
     event.waitUntil(fetch((msg.replyUrl || '/api/reply').replace('/api/reply', '/api/delivered'), {
@@ -89,9 +125,37 @@ async function sendReply(data, text) {
   await self.registration.showNotification("Your reply wasn't sent", { ...base, silent: false, body: `${error} Tap to open the app and reply there.` });
 }
 
+// A call's notification: Decline declines it from here (with the chat's pass, see /api/call-decline); Answer opens
+// the app straight into the call; tapping the notification itself opens the app on its ringing screen.
+function callClick(event, data) {
+  if (event.action === 'decline') {
+    if (data.declineToken) {
+      event.waitUntil(fetch(data.declineUrl || '/api/call-decline', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: data.declineToken, callId: data.callId }),
+      }).catch(() => {}));
+    }
+    return;
+  }
+  const answer = event.action === 'answer';
+  const link = new URL(data.link || '/?chat=1', self.location.origin);
+  if (answer) link.searchParams.set('answer', '1');
+  event.waitUntil((async () => {
+    const tabs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const tab = tabs.find((c) => new URL(c.url).origin === self.location.origin);
+    if (tab) {
+      // the app is open: tell it, without reloading it
+      await tab.focus().catch(() => {});
+      tab.postMessage({ type: 'call', callId: data.callId, answer });
+      return;
+    }
+    await self.clients.openWindow(link.href);
+  })());
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
+  if (data.type === 'call') { callClick(event, data); return; }
   // typed into the notification's text box (where the system has one): send it from here
   const typed = event.action === 'reply' && typeof event.reply === 'string' ? event.reply.trim() : '';
   if (typed && data.replyToken) {

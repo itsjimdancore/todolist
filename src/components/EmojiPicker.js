@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import StickerPicker from './StickerPicker';
 
 // The chat's emoji panel: tabs, a search box, and the ones you used most recently (kept on this device).
 // Each line: the emoji, then a few words to find it by.
@@ -23,9 +24,16 @@ const readRecent = () => { try { const v = JSON.parse(localStorage.getItem(RECEN
 const saveRecent = (list) => { try { localStorage.setItem(RECENT, JSON.stringify(list)); } catch { /* private window: not kept */ } };
 const TAB_ICONS = { Recent: '🕘', Smileys: '😀', 'People & gestures': '👋', 'Hearts & love': '❤️', Animals: '🐶', 'Food & drink': '🍕', Activities: '⚽', 'Travel & places': '✈️', Objects: '💡' };
 
-export default function EmojiPicker({ onPick, onClose }) {
+// which side was open last (Emoji or Stickers), kept on this device
+const MODE = 'chat-picker-mode';
+const readMode = () => { try { return localStorage.getItem(MODE) === 'stickers' ? 'stickers' : 'emoji'; } catch { return 'emoji'; } };
+
+// stickers: the Stickers side's props (see StickerPicker); the Emoji | Stickers switch shows only when it's given
+export default function EmojiPicker({ onPick, stickers, onClose }) {
   const [recent, setRecent] = useState([]);
-  useEffect(() => setRecent(readRecent()), []);
+  const [mode, setModeState] = useState('emoji');
+  useEffect(() => { setRecent(readRecent()); if (stickers) setModeState(readMode()); }, [!!stickers]); // eslint-disable-line react-hooks/exhaustive-deps
+  const setMode = (m) => { setModeState(m); try { localStorage.setItem(MODE, m); } catch { /* not kept */ } };
   const [tab, setTab] = useState(null); // null = Recent if there are some, else the first tab
   const [q, setQ] = useState('');
   const box = useRef(null);
@@ -58,7 +66,8 @@ export default function EmojiPicker({ onPick, onClose }) {
   };
 
   return (
-    <div className="emo" ref={box} role="dialog" aria-label="Emoji">
+    <div className="emo" ref={box} role="dialog" aria-label={mode === 'stickers' ? 'Stickers' : 'Emoji'}>
+      {mode === 'stickers' && stickers ? <StickerPicker {...stickers} /> : <>
       <div className="emo-tabs" role="tablist">
         {tabs.map((t) => (
           <button key={t} type="button" role="tab" aria-selected={!term && shownTab === t} title={t} aria-label={t}
@@ -75,6 +84,14 @@ export default function EmojiPicker({ onPick, onClose }) {
           <button key={x.e} type="button" className="emo-e" onClick={() => pick(x.e)} title={x.words || x.e} aria-label={x.words || x.e}>{x.e}</button>
         )) : <p className="emo-none">No emoji found</p>}
       </div>
+      </>}
+      {stickers && (
+        <div className="emo-switch" role="tablist" aria-label="Emoji or stickers">
+          {[['emoji', 'Emoji'], ['stickers', 'Stickers']].map(([m, label]) => (
+            <button key={m} type="button" role="tab" aria-selected={mode === m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{label}</button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

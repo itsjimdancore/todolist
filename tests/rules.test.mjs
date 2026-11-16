@@ -685,6 +685,265 @@ describe('chat messages', () => {
       await assertSucceeds(updateDoc(msg('v16'), { text: '', deleted: true, audio: deleteField() }));
     });
   });
+
+  describe('stickers', () => {
+    const HASH = 'a'.repeat(64);
+    const made = (over = {}) => ({ data: 'UklGRg==', mime: 'image/webp', hash: HASH, ...over });
+    const sticker = (s, over = {}) => ({ from: people.writer.email, text: '', sticker: s, createdAt: serverTimestamp(), ...over });
+    const seedSticker = (id) => env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, 'chats', CHAT), { members: [people.writer.email, people.reader.email] });
+      await setDoc(doc(db, 'chats', CHAT, 'messages', id),
+        { from: people.writer.email, text: '', sticker: made(), createdAt: Timestamp.fromMillis(Date.now() - 60000) });
+    });
+
+    test('can send a built-in sticker', async () => {
+      await seed('seed', 1);
+      await assertSucceeds(setDoc(msg('s1'), sticker({ pack: 'us', id: 'good-morning' })));
+    });
+    test('can send a made sticker, and answer with one', async () => {
+      await seed('seed', 1);
+      await assertSucceeds(setDoc(msg('s2'), sticker(made())));
+      await assertSucceeds(setDoc(msg('s3'), sticker(made({ mime: 'image/png' }), { reply: { id: 'seed', text: 'hi', from: people.reader.email } })));
+    });
+    test('the biggest allowed image still fits', async () => {
+      await seed('seed', 1);
+      await assertSucceeds(setDoc(msg('s4'), sticker(made({ data: 'a'.repeat(80000) }))));
+    });
+    test('the sticker is checked', async () => {
+      await seed('seed', 1);
+      await assertFails(setDoc(msg('s5'), sticker(made({ data: 'a'.repeat(80001) })))); // too big
+      await assertFails(setDoc(msg('s6'), sticker(made({ mime: 'image/svg+xml' })))); // wrong type
+      await assertFails(setDoc(msg('s7'), sticker(made({ mime: 'image/gif' }))));
+      await assertFails(setDoc(msg('s8'), sticker(made({ hash: 'nothex' }))));
+      await assertFails(setDoc(msg('s9'), sticker(made({ data: '' }))));
+      await assertFails(setDoc(msg('s10'), sticker({ pack: 'us', id: 'good-morning', data: 'AAAA' }))); // both shapes
+      await assertFails(setDoc(msg('s11'), sticker({ pack: 'us' }))); // half of one
+      await assertFails(setDoc(msg('s12'), sticker({ pack: '../x', id: 'a' })));
+      await assertFails(setDoc(msg('s13'), sticker('good-morning')));
+    });
+    test('a sticker comes alone: no text or audio with it', async () => {
+      await seed('seed', 1);
+      await assertFails(setDoc(msg('s14'), sticker(made(), { text: 'hi' })));
+      await assertFails(setDoc(msg('s15'), sticker(made(), { audio: { data: 'AAAA', mime: 'audio/webm', duration: 3 } })));
+    });
+    test('cannot send one as someone else', async () => {
+      await seed('seed', 1);
+      await assertFails(setDoc(msg('s16'), sticker(made(), { from: people.reader.email })));
+    });
+    test('a stranger cannot send one', async () => {
+      await seed('seed', 1);
+      await assertFails(setDoc(doc(as('stranger'), 'chats', CHAT, 'messages', 's17'),
+        { from: people.stranger.email, text: '', sticker: made(), createdAt: serverTimestamp() }));
+    });
+    test('a sticker cannot be edited into text', async () => {
+      await seedSticker('s18');
+      await assertFails(edit(msg('s18')));
+    });
+    test('delete for everyone must remove the image', async () => {
+      await seedSticker('s19');
+      await assertFails(updateDoc(msg('s19'), { text: '', deleted: true }));
+      await assertSucceeds(updateDoc(msg('s19'), { text: '', deleted: true, sticker: deleteField() }));
+    });
+  });
+});
+
+describe('calls', () => {
+  const CHAT = 'chat1';
+  const CALLER = 'writer'; // writer calls reader
+  const CALLEE = 'reader';
+  const offer = { type: 'offer', sdp: 'v=0 offer' };
+  const answer = { type: 'answer', sdp: 'v=0 answer' };
+  const call = (who, id = 'c1') => doc(as(who), 'chats', CHAT, 'calls', id);
+  const newCall = (over = {}) => ({
+    from: people[CALLER].email, to: people[CALLEE].email, kind: 'voice', status: 'ringing', offer, createdAt: serverTimestamp(), ...over,
+  });
+  const end = (status, who) => ({ status, endedAt: serverTimestamp(), endedBy: people[who].email });
+  const cand = (over = {}) => ({ candidate: 'candidate:1 1 udp 2122260223 192.0.2.1 54321 typ host', sdpMid: '0', sdpMLineIndex: 0, usernameFragment: 'abcd', createdAt: serverTimestamp(), ...over });
+  // the chat, and optionally a call already in some state (secsAgo: when it started ringing)
+  const seed = (callState = null, secsAgo = 5) => env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'chats', CHAT), { members: [people.reader.email, people.writer.email] });
+    if (callState) {
+      await setDoc(doc(db, 'chats', CHAT, 'calls', 'c1'), {
+        from: people[CALLER].email, to: people[CALLEE].email, kind: 'video', offer,
+        createdAt: Timestamp.fromMillis(Date.now() - secsAgo * 1000), ...callState,
+      });
+    }
+  });
+
+  test('a member can start a call to the other member', async () => {
+    await seed();
+    await assertSucceeds(setDoc(call(CALLER), newCall()));
+    await assertSucceeds(setDoc(call(CALLER, 'c2'), newCall({ kind: 'video' })));
+  });
+  test('a call is checked when it starts', async () => {
+    await seed();
+    await assertFails(setDoc(call(CALLER), newCall({ from: people[CALLEE].email }))); // as someone else
+    await assertFails(setDoc(call(CALLER), newCall({ to: people.stranger.email }))); // not in the chat
+    await assertFails(setDoc(call(CALLER), newCall({ to: people[CALLER].email }))); // myself
+    await assertFails(setDoc(call(CALLER), newCall({ status: 'accepted' })));
+    await assertFails(setDoc(call(CALLER), newCall({ kind: 'screen' })));
+    await assertFails(setDoc(call(CALLER), newCall({ offer: { type: 'answer', sdp: 'x' } })));
+    await assertFails(setDoc(call(CALLER), newCall({ offer: { type: 'offer', sdp: 'x'.repeat(30001) } })));
+    await assertFails(setDoc(call(CALLER), newCall({ answer })));
+  });
+  test('nobody outside the chat can start, read or answer one', async () => {
+    await seed({ status: 'ringing' });
+    await assertFails(getDoc(call('stranger')));
+    await assertFails(setDoc(call('stranger', 'c9'), newCall({ from: people.stranger.email })));
+    await assertFails(updateDoc(call('stranger'), { status: 'accepted', answer, answeredAt: serverTimestamp() }));
+  });
+  test('both members can read it', async () => {
+    await seed({ status: 'ringing' });
+    await assertSucceeds(getDoc(call(CALLER)));
+    await assertSucceeds(getDoc(call(CALLEE)));
+  });
+  test('only the person called answers it, within a minute', async () => {
+    await seed({ status: 'ringing' });
+    await assertFails(updateDoc(call(CALLER), { status: 'accepted', answer, answeredAt: serverTimestamp() }));
+    await assertFails(updateDoc(call(CALLEE), { status: 'accepted', answer: offer, answeredAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(call(CALLEE), { status: 'accepted', answer, answeredAt: serverTimestamp() }));
+  });
+  test('a call that rang over a minute ago can no longer be answered', async () => {
+    await seed({ status: 'ringing' }, 70);
+    await assertFails(updateDoc(call(CALLEE), { status: 'accepted', answer, answeredAt: serverTimestamp() }));
+  });
+  test('the person called can decline, or be busy; the caller cannot do that for them', async () => {
+    await seed({ status: 'ringing' });
+    await assertFails(updateDoc(call(CALLER), end('declined', CALLER)));
+    await assertFails(updateDoc(call(CALLEE), end('declined', CALLER))); // endedBy must be me
+    await assertSucceeds(updateDoc(call(CALLEE), end('busy', CALLEE)));
+  });
+  test('the caller can give up while it rings (missed)', async () => {
+    await seed({ status: 'ringing' });
+    await assertSucceeds(updateDoc(call(CALLER), end('missed', CALLER)));
+  });
+  test('the person called can mark it missed only after 45 seconds', async () => {
+    await seed({ status: 'ringing' }, 10);
+    await assertFails(updateDoc(call(CALLEE), end('missed', CALLEE)));
+    await seed({ status: 'ringing' }, 50);
+    await assertSucceeds(updateDoc(call(CALLEE), end('missed', CALLEE)));
+  });
+  test('either can hang up an answered call, but not reopen it', async () => {
+    await seed({ status: 'accepted', answer });
+    await assertFails(updateDoc(call(CALLER), end('missed', CALLER)));
+    await assertSucceeds(updateDoc(call(CALLEE), end('ended', CALLEE)));
+    await assertFails(updateDoc(call(CALLER), { status: 'accepted' }));
+    await assertFails(updateDoc(call(CALLER), end('ended', CALLER)));
+  });
+  test('reconnecting: the caller sends a new offer, the person called a new answer', async () => {
+    await seed({ status: 'accepted', answer });
+    await assertSucceeds(updateDoc(call(CALLER), { offer: { type: 'offer', sdp: 'v=0 restart' } }));
+    await assertSucceeds(updateDoc(call(CALLEE), { answer: { type: 'answer', sdp: 'v=0 restart' } }));
+    await assertFails(updateDoc(call(CALLEE), { offer: { type: 'offer', sdp: 'v=0 x' } }));
+    await assertFails(updateDoc(call(CALLER), { answer: { type: 'answer', sdp: 'v=0 x' } }));
+  });
+  test('only the caller marks it logged, once it is over', async () => {
+    await seed({ status: 'accepted', answer });
+    await assertFails(updateDoc(call(CALLER), { logged: true }));
+    await seed({ status: 'ended', answer });
+    await assertFails(updateDoc(call(CALLEE), { logged: true }));
+    await assertSucceeds(updateDoc(call(CALLER), { logged: true }));
+  });
+  test('calls are never deleted', async () => {
+    await seed({ status: 'ended' });
+    await assertFails(deleteDoc(call(CALLER)));
+  });
+
+  describe('network routes', () => {
+    const route = (who, side, id = 'r1') => doc(as(who), 'chats', CHAT, 'calls', 'c1', side, id);
+    test('each side writes only its own, and both read them', async () => {
+      await seed({ status: 'ringing' });
+      await assertSucceeds(setDoc(route(CALLER, 'callerCandidates'), cand()));
+      await assertSucceeds(setDoc(route(CALLEE, 'calleeCandidates'), cand({ sdpMid: null, sdpMLineIndex: null })));
+      await assertFails(setDoc(route(CALLEE, 'callerCandidates', 'r2'), cand()));
+      await assertFails(setDoc(route(CALLER, 'calleeCandidates', 'r2'), cand()));
+      await assertSucceeds(getDocs(collection(as(CALLEE), 'chats', CHAT, 'calls', 'c1', 'callerCandidates')));
+      await assertFails(getDocs(collection(as('stranger'), 'chats', CHAT, 'calls', 'c1', 'callerCandidates')));
+    });
+    test('a route is checked', async () => {
+      await seed({ status: 'ringing' });
+      await assertFails(setDoc(route(CALLER, 'callerCandidates'), cand({ candidate: 'x'.repeat(1001) })));
+      await assertFails(setDoc(route(CALLER, 'callerCandidates'), cand({ extra: 1 })));
+      await assertFails(setDoc(route(CALLER, 'callerCandidates'), cand({ sdpMLineIndex: 'zero' })));
+    });
+    test('none are added once the call is over, and either side clears them', async () => {
+      await seed({ status: 'ended' });
+      await assertFails(setDoc(route(CALLER, 'callerCandidates', 'r3'), cand()));
+      await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'chats', CHAT, 'calls', 'c1', 'callerCandidates', 'r4'), { candidate: 'c' }));
+      await assertSucceeds(deleteDoc(route(CALLEE, 'callerCandidates', 'r4')));
+    });
+  });
+
+  describe('the call in the chat', () => {
+    const msg = (who, id) => doc(as(who), 'chats', CHAT, 'messages', id);
+    const log = (who, over = {}, callOver = {}) => ({
+      from: people[who].email, text: '', createdAt: serverTimestamp(),
+      call: { callId: 'c1', kind: 'video', status: 'ended', duration: 252, ...callOver }, ...over,
+    });
+    test('the caller puts it in the chat', async () => {
+      await seed({ status: 'ended' });
+      await assertSucceeds(setDoc(msg(CALLER, 'l1'), log(CALLER)));
+      await assertSucceeds(setDoc(msg(CALLER, 'l2'), log(CALLER, {}, { status: 'missed', duration: 0 })));
+      await assertSucceeds(setDoc(msg(CALLER, 'l2b'), log(CALLER, {}, { status: 'failed', duration: 0 })));
+    });
+    test('the person called cannot, nor for a call that does not exist', async () => {
+      await seed({ status: 'ended' });
+      await assertFails(setDoc(msg(CALLEE, 'l3'), log(CALLEE)));
+      await assertFails(setDoc(msg(CALLER, 'l4'), log(CALLER, {}, { callId: 'nope' })));
+    });
+    test('the line is checked', async () => {
+      await seed({ status: 'ended' });
+      await assertFails(setDoc(msg(CALLER, 'l5'), log(CALLER, {}, { duration: 21601 })));
+      await assertFails(setDoc(msg(CALLER, 'l6'), log(CALLER, {}, { status: 'ringing' })));
+      await assertFails(setDoc(msg(CALLER, 'l7'), log(CALLER, { text: 'hi' })));
+      await assertFails(setDoc(msg(CALLER, 'l8'), log(CALLER, {}, { extra: 1 })));
+    });
+    test('it cannot be edited, and deleting it for everyone removes it', async () => {
+      await seed({ status: 'ended' });
+      await setDoc(msg(CALLER, 'l9'), log(CALLER));
+      await assertFails(updateDoc(msg(CALLER, 'l9'), { text: 'changed', editedAt: serverTimestamp() }));
+      await assertFails(updateDoc(msg(CALLER, 'l9'), { text: '', deleted: true }));
+      await assertSucceeds(updateDoc(msg(CALLER, 'l9'), { text: '', deleted: true, call: deleteField() }));
+    });
+  });
+});
+
+describe('saved stickers', () => {
+  const HASH = 'b'.repeat(64);
+  const mine = (who, key) => doc(as(who), 'users', people[who].uid, 'stickers', key);
+
+  test('I can save, read, star and remove my own', async () => {
+    await assertSucceeds(setDoc(mine('reader', HASH), { data: 'UklGRg==', mime: 'image/webp', lastUsedAt: serverTimestamp() }));
+    await assertSucceeds(setDoc(mine('reader', 'us-good-morning'), { pack: 'us', id: 'good-morning', lastUsedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(mine('reader', HASH), { fav: true, favAt: serverTimestamp() }));
+    await assertSucceeds(getDoc(mine('reader', HASH)));
+    await assertSucceeds(getDocs(collection(as('reader'), 'users', people.reader.uid, 'stickers')));
+    await assertSucceeds(deleteDoc(mine('reader', HASH)));
+  });
+  test('saving the way the app does: merged, and unstarring drops favAt', async () => {
+    const s = { pack: 'us', id: 'hug' };
+    await assertSucceeds(setDoc(mine('reader', 'us-hug'), { ...s, lastUsedAt: serverTimestamp() }, { merge: true }));
+    await assertSucceeds(setDoc(mine('reader', 'us-hug'), { ...s, fav: true, favAt: serverTimestamp() }, { merge: true }));
+    await assertSucceeds(setDoc(mine('reader', 'us-hug'), { ...s, fav: false, favAt: deleteField() }, { merge: true }));
+    await assertFails(setDoc(mine('reader', 'us-hug'), { data: 'AAAA', mime: 'image/webp' }, { merge: true })); // both shapes
+  });
+  test('nobody else can read or write mine', async () => {
+    await setDoc(mine('reader', HASH), { data: 'UklGRg==', mime: 'image/webp' });
+    await assertFails(getDoc(doc(as('writer'), 'users', people.reader.uid, 'stickers', HASH)));
+    await assertFails(getDocs(collection(as('writer'), 'users', people.reader.uid, 'stickers')));
+    await assertFails(setDoc(doc(as('writer'), 'users', people.reader.uid, 'stickers', 'c'.repeat(64)), { data: 'AAAA', mime: 'image/webp' }));
+    await assertFails(deleteDoc(doc(as('writer'), 'users', people.reader.uid, 'stickers', HASH)));
+  });
+  test('a saved sticker is checked', async () => {
+    await assertFails(setDoc(mine('reader', 'us-other'), { pack: 'us', id: 'good-morning' })); // key must be pack-id
+    await assertFails(setDoc(mine('reader', 'not-a-hash'), { data: 'AAAA', mime: 'image/webp' })); // key must be the hash
+    await assertFails(setDoc(mine('reader', HASH), { data: 'a'.repeat(80001), mime: 'image/webp' }));
+    await assertFails(setDoc(mine('reader', HASH), { data: 'AAAA', mime: 'image/svg+xml' }));
+    await assertFails(setDoc(mine('reader', HASH), { data: 'AAAA', mime: 'image/webp', fav: 'yes' }));
+    await assertFails(setDoc(mine('reader', HASH), { data: 'AAAA', mime: 'image/webp', note: 'extra' }));
+  });
 });
 
 describe('partners', () => {

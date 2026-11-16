@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#000" flood-opacity=".28"/></filter></defs>
+<g filter="url(#sh)">
+<circle cx="186" cy="190" r="82" fill="#8fe3d3" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="16"/><circle cx="326" cy="190" r="82" fill="#0f6b5f" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="16"/>
+<path d="M160 186q10-10 20 0M206 186q10-10 20 0" stroke="#06211d" stroke-width="8" fill="none" stroke-linecap="round"/>
+<path d="M300 186q10-10 20 0M346 186q10-10 20 0" stroke="#fff" stroke-width="8" fill="none" stroke-linecap="round"/>
+<path d="M120 300q136 70 272 0" stroke="#fff" stroke-width="54" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M120 300q136 70 272 0" stroke="#f0b45a" stroke-width="38" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path transform="translate(256 100) scale(0.6)" d="M0 60C-70 15-95-20-80-50c14-28 55-35 80-5c25-30 66-23 80 5c15 30-10 65-80 110z" fill="#f2867a" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="23.3"/>
+<text x="256" y="446" text-anchor="middle" font-size="100" font-family="'Arial Rounded MT Bold','Nunito','Segoe UI Black','Segoe UI',Arial,sans-serif" font-weight="800" fill="#0f6b5f" stroke="#fff" stroke-linejoin="round" paint-order="stroke" stroke-width="24" transform="rotate(-4 256 446)">Hug!</text></g></svg>
