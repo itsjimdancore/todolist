@@ -2737,16 +2737,10 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 .stk-make .emo-h { align-self: stretch; }
 .stk-make-start { margin: auto; max-width: 300px; display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; color: var(--wa-muted); font-size: 14px; }
 .stk-make-start p { margin: 0; }
-.stk-crop { flex: none; border-radius: 12px; background: #0b141a; touch-action: none; cursor: grab; box-shadow: 0 0 0 2px var(--wa-green); }
-.stk-crop:active { cursor: grabbing; }
-.stk-zoom { width: 220px; accent-color: var(--wa-green); }
-.stk-make-row { display: flex; gap: 8px; }
 .stk-btn { height: 34px; padding: 0 16px; border: 1px solid var(--wa-line); border-radius: 17px; background: none; color: #e9edef; font-family: var(--mono); font-size: 13px; font-weight: 600; cursor: pointer; }
 .stk-btn.primary { border-color: var(--wa-green); background: var(--wa-green); color: #0b141a; }
 .stk-btn:disabled { opacity: .6; cursor: default; }
 .stk-err { margin: 0; color: var(--danger); font-size: 13px; text-align: center; }
-/* room for the whole crop screen (square, zoom, buttons) without scrolling */
-.emo:has(.stk-crop) { height: min(440px, calc(100dvh - 140px)); }
 
 /* contact info */
 .chat-info { min-height: 0; display: flex; flex-direction: column; background: var(--wa-panel); border-left: 1px solid var(--wa-line); }
@@ -2778,7 +2772,6 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
   .chat-item { padding: 10px 14px; }
   .chat-info { border-left: none; }
   .emo { left: 0; right: 0; width: 100%; bottom: 100%; border-radius: 14px 14px 0 0; height: 300px; }
-  .emo:has(.stk-crop) { height: min(440px, calc(100dvh - 140px)); }
   .chat-h { min-height: 56px; padding: 6px 8px !important; }
   .chat-h-who { gap: 10px; }
 }
@@ -2967,3 +2960,59 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 .call-in-btns { display: flex; justify-content: center; gap: min(30vw, 120px); }
 .call-btn-l { display: flex; flex-direction: column; align-items: center; gap: 10px; font-family: var(--mono); font-size: 14px; color: rgb(233 237 239 / .85); }
 .call-btn-l .call-btn { width: 68px; height: 68px; }
+/* ---------- making a sticker (StickerEditor), like WhatsApp's ---------- */
+.se { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; background: #0b141a; color: #e9edef; outline: none; }
+.se-top { flex: none; display: flex; align-items: center; gap: 6px; padding: max(env(safe-area-inset-top), 8px) 10px 8px; }
+.se-title { flex: 1; font-size: 17px; font-weight: 500; }
+.se-ic { width: 42px; height: 42px; border: none; border-radius: 50%; background: none; color: inherit; font-size: 20px; cursor: pointer; }
+.se-ic:hover { background: rgb(255 255 255 / .08); }
+.se-ic:disabled { opacity: .35; cursor: default; }
+.se-mid { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 0 12px; }
+/* the checks show what will be see-through */
+.se-stage { border-radius: 12px; touch-action: none; cursor: grab;
+  background: repeating-conic-gradient(#1c262c 0% 25%, #141d22 0% 50%) 50% / 24px 24px; box-shadow: 0 0 0 1px rgb(255 255 255 / .08); }
+.se-stage:active { cursor: grabbing; }
+.se-stage.drawing { cursor: crosshair; }
+.se-wait { color: rgb(233 237 239 / .7); }
+.se-err { margin: 0; max-width: 360px; color: #ffb4ab; font-size: 14px; text-align: center; }
+.se-busy { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: 24px; background: rgb(11 20 26 / .78); text-align: center; }
+.se-busy p { margin: 0; font-size: 15px; }
+.se-busy small { max-width: 300px; color: rgb(233 237 239 / .7); }
+.se-bar { width: min(280px, 80vw); height: 6px; border-radius: 3px; background: rgb(255 255 255 / .15); overflow: hidden; }
+.se-bar i { display: block; height: 100%; background: #00a884; transition: width .2s; }
+.se-tools { flex: none; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px;
+  padding: 10px 10px max(env(safe-area-inset-bottom), 14px); }
+.se-tool { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 58px; padding: 6px 4px; border: none; border-radius: 12px;
+  background: none; color: rgb(233 237 239 / .85); font-family: var(--mono); font-size: 11.5px; cursor: pointer; }
+.se-tool span { font-size: 22px; line-height: 1.1; }
+.se-tool:hover, .se-tool.on { background: rgb(255 255 255 / .1); color: #fff; }
+.se-tool:disabled { opacity: .4; cursor: default; }
+.se-send, .se-done { height: 40px; padding: 0 20px; border: none; border-radius: 20px; background: #00a884; color: #0b141a;
+  font-family: var(--mono); font-size: 14px; font-weight: 700; cursor: pointer; }
+.se-send { margin-left: 6px; }
+.se-send:disabled { opacity: .5; cursor: default; }
+.se-sw { width: 28px; height: 28px; border: 2px solid rgb(255 255 255 / .35); border-radius: 50%; cursor: pointer; }
+.se-sw.on { border-color: #fff; box-shadow: 0 0 0 2px #00a884; }
+.se-pen { display: grid; place-items: center; width: 36px; height: 36px; border: none; border-radius: 50%; background: none; cursor: pointer; }
+.se-pen i { display: block; border-radius: 50%; background: #e9edef; }
+.se-pen.on { background: rgb(255 255 255 / .14); }
+/* text, emoji and the cutout question slide up over the tools */
+.se-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 14px max(env(safe-area-inset-bottom), 16px); border-radius: 16px 16px 0 0; background: #1f2c33; box-shadow: 0 -10px 30px rgb(0 0 0 / .4); }
+.se-text textarea { width: 100%; padding: 10px 12px; border: none; border-radius: 10px; background: #0b141a; resize: none; text-align: center; }
+.se-row { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.se-font { height: 36px; padding: 0 14px; border: 1px solid rgb(255 255 255 / .2); border-radius: 18px; background: none; color: #e9edef; cursor: pointer; }
+.se-font.on { border-color: #00a884; background: rgb(0 168 132 / .15); }
+.se-ask p { margin: 0; text-align: center; font-size: 14.5px; color: rgb(233 237 239 / .85); }
+.se-ask p b { font-size: 16px; color: #fff; }
+.se-warn { color: #f0b45a !important; }
+.se-emo { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; height: 340px; }
+.se-emo .emo { position: absolute; inset: 0; width: auto; height: auto; border-radius: 16px 16px 0 0; }
+
+/* ＋: make or import */
+.stk-make.drag { box-shadow: inset 0 0 0 2px var(--wa-green); background: rgb(0 168 132 / .08); }
+.stk-how { width: 100%; font-size: 13px; color: var(--wa-muted); text-align: left; }
+.stk-how summary { cursor: pointer; color: #e9edef; font-family: var(--mono); font-size: 12.5px; text-align: center; }
+.stk-how p { margin: 8px 0 0; line-height: 1.45; }
+.stk-how b { color: #e9edef; font-weight: 600; }

@@ -192,6 +192,9 @@ function WorkspaceInner({ user }) {
   const chatApi = useChat(user);
   // ---- voice and video calls: they ring on every page, and carry on while you move around the app
   const callApi = useCall(user, chatApi);
+  // the app's helper (public/push-sw.js), also without notifications on: it receives stickers shared to the app
+  // from Android's share sheet. The same file and options as lib/push.js, so it's one and the same registration.
+  useEffect(() => { navigator.serviceWorker?.register('/push-sw.js', { updateViaCache: 'none' }).catch(() => {}); }, []);
   const callWith = chatApi.other;
   const callName = callWith ? nickOf(callWith) || chatApi.chat?.names?.[callWith] || callWith.split('@')[0] : '';
 
