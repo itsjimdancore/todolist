@@ -8,7 +8,7 @@ import { friendlyError } from '@/lib/firebase';
 import { EMAIL_RE, roleLabel } from '@/lib/permissions';
 import { Avatar, colorFor, displayName, nickOf, toDate } from '@/lib/people';
 import { stickerLabel, stickerOf, stickerSrc } from '@/lib/stickerPacks';
-import { setFav, touchSticker, useMyStickers } from '@/lib/stickers';
+import { importStickers, setFav, takeSharedStickers, touchSticker, useMyStickers } from '@/lib/stickers';
 import { callPreview, callText } from '@/lib/calls';
 import { CallIcon } from './CallScreen';
 import BackLink from './BackLink';
@@ -670,7 +670,33 @@ function Conversation({ api, calls, user, person, name, showBack, back, jumpTo, 
     await setFav(user.uid, s, true, mine.docs).catch(() => {});
     if (!(await sendStickerMsg(s))) throw new Error('The sticker was saved in your Favourites, but not sent. Try again from there.');
   }
-  const stickerPanel = { mine, onSend: sendStickerMsg, onFav: favSticker, onMade: sendMade };
+  // bringing stickers in (from WhatsApp): they're added to my Favourites
+  const [importing, setImporting] = useState(null); // { done, total }
+  const mineRef = useRef(mine);
+  mineRef.current = mine;
+  async function runImport(files) {
+    if (importing || !files.length) return;
+    setImporting({ done: 0, total: files.length });
+    try {
+      const r = await importStickers(user.uid, files, mineRef.current.docs, setImporting);
+      const parts = [r.added && `Added ${r.added} to Favourites`, r.already && `${r.already} already there`,
+        r.failed && `${r.failed} couldn't be read`, r.full && `${r.full} left out (you can keep up to 200)`].filter(Boolean);
+      toast(parts.join(' · ') || 'Nothing to add', r.added ? 'ok' : 'err');
+    } catch (er) {
+      toast(`Import stopped: ${friendlyError(er)}`, 'err');
+    }
+    setImporting(null);
+  }
+  // stickers shared to the app from Android's share sheet, waiting since the app opened
+  useEffect(() => {
+    if (!mine.ready) return;
+    takeSharedStickers().then((files) => {
+      if (!files.length) return;
+      setEmoji(true);
+      runImport(files);
+    });
+  }, [mine.ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stickerPanel = { mine, onSend: sendStickerMsg, onFav: favSticker, onMade: sendMade, onImport: runImport, importing };
   // an emoji from the picker, where the cursor is
   function insert(e) {
     const el = input.current;

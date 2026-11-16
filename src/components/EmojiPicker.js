@@ -42,10 +42,10 @@ export default function EmojiPicker({ onPick, stickers, onClose }) {
 
   useEffect(() => {
     const down = (e) => {
-      if (box.current?.contains(e.target) || e.target.closest?.('[aria-label="Emoji"], [aria-label="Close emoji"]')) return;
+      if (box.current?.contains(e.target) || e.target.closest?.('[aria-label="Emoji"], [aria-label="Close emoji"], .se')) return;
       onClose();
     };
-    const key = (e) => e.key === 'Escape' && onClose();
+    const key = (e) => e.key === 'Escape' && !e.target.closest?.('.se') && onClose();
     document.addEventListener('pointerdown', down);
     document.addEventListener('keydown', key);
     return () => { document.removeEventListener('pointerdown', down); document.removeEventListener('keydown', key); };

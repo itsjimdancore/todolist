@@ -7,6 +7,28 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
+// Stickers shared to the app from Android's share sheet (manifest.js share_target): keep the files where the app
+// can take them (Cache Storage 'shared-stickers'), then open the chat, which adds them to Favourites.
+// Only this one request is handled here; everything else goes to the network as usual.
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'POST') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin || url.pathname !== '/share-target') return;
+  event.respondWith((async () => {
+    try {
+      const form = await req.formData();
+      const files = form.getAll('stickers').filter((f) => f && typeof f !== 'string').slice(0, 300);
+      await caches.delete('shared-stickers');
+      const cache = await caches.open('shared-stickers');
+      await Promise.all(files.map((f, i) => cache.put(`/__shared-stickers/${i}`, new Response(f, {
+        headers: { 'Content-Type': f.type || 'image/webp', 'X-Name': encodeURIComponent(f.name || 'sticker.webp') },
+      }))));
+    } catch { /* nothing kept: the chat just opens */ }
+    return Response.redirect('/?view=chat', 303);
+  })());
+});
+
 // "Also while I'm using the app": the page saves it in Cache Storage, which this worker can read.
 // On unless it was turned off ('0'), so notifications show even while the app is open.
 async function whileOpen() {
