@@ -591,6 +591,36 @@ function Conversation({ api, calls, user, person, name, showBack, back, jumpTo, 
   };
   const earlier = () => { keepFrom.current = scroller.current.scrollHeight - scroller.current.scrollTop; loadMore(); };
 
+  // ---- phones, like WhatsApp: the conversation fills the screen and the keyboard pushes only the box up.
+  // The app is sized to the part of the screen the keyboard leaves free, so the header stays at the top,
+  // the page never slides or grows, and the newest message stays just above the box.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv || !window.matchMedia('(max-width: 860px)').matches) return undefined;
+    const root = document.documentElement;
+    root.classList.add('chat-full');
+    let raf = 0;
+    const fit = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        root.style.setProperty('--vvh', `${Math.round(vv.height)}px`);
+        if (window.scrollY) window.scrollTo(0, 0); // iPhone slides the whole page up to show the box; undo that
+        const el = scroller.current;
+        if (el && atBottom.current) el.scrollTop = el.scrollHeight;
+      });
+    };
+    fit();
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+    return () => {
+      cancelAnimationFrame(raf);
+      vv.removeEventListener('resize', fit);
+      vv.removeEventListener('scroll', fit);
+      root.classList.remove('chat-full');
+      root.style.removeProperty('--vvh');
+    };
+  }, []);
+
   // ---- read: while the conversation is on screen
   const unreadNow = api.unread;
   useEffect(() => {
@@ -781,6 +811,18 @@ function Conversation({ api, calls, user, person, name, showBack, back, jumpTo, 
   const menuMsg = menu && (messages || []).find((x) => x.id === menu.id);
   const current = finding && found.length ? found[found.length - 1 - fi].id : null;
   const empty = !text.trim() && !editing;
+
+  // the box grows with the message up to about six lines, then scrolls inside itself (browsers without
+  // CSS field-sizing, such as older iPhones, need this); the messages above stay pinned to the newest
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (el && !(window.CSS?.supports?.('field-sizing', 'content'))) {
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    }
+    const sc = scroller.current;
+    if (sc && atBottom.current) sc.scrollTop = sc.scrollHeight;
+  }, [text, rec, reply, editing]);
 
   return (
     <div className="chat-conv">

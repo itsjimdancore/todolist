@@ -3025,3 +3025,16 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
   textarea, select, [contenteditable="true"] { font-size: 16px !important; }
 }
+
+/* Phones, like WhatsApp: an open conversation fills the screen. The app is sized to the space the keyboard
+   leaves (--vvh, set by the chat), the page itself never scrolls or grows, and the app's top bar steps aside
+   so the chat header sits at the top. The top bar comes back on the Chats list. */
+@media (max-width: 860px) {
+  html.chat-full, html.chat-full body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  html.chat-full .shell { height: var(--vvh, 100dvh); }
+  html.chat-full .side { border-bottom: none; }
+  html.chat-full .side-top { display: none; }
+  html.chat-full .main { padding-top: 0; }
+  html.chat-full .main > .chat-shell { margin: 0; }
+  html.chat-full .chat-scroll { overscroll-behavior: contain; }
+}

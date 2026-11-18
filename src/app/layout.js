@@ -7,7 +7,7 @@ export const metadata = {
   appleWebApp: { capable: true, title: 'Shared To-Do', statusBarStyle: 'black-translucent' },
 };
 
-export const viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#0f1514', colorScheme: 'dark' };
+export const viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', interactiveWidget: 'resizes-content', themeColor: '#0f1514', colorScheme: 'dark' };
 
 export default function RootLayout({ children }) {
   return (
