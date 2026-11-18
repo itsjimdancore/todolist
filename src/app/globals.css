@@ -3016,3 +3016,12 @@ textarea.letter-body:focus { outline: none; box-shadow: 0 0 0 2px rgb(90 42 10 /
 .stk-how summary { cursor: pointer; color: #e9edef; font-family: var(--mono); font-size: 12.5px; text-align: center; }
 .stk-how p { margin: 8px 0 0; line-height: 1.45; }
 .stk-how b { color: #e9edef; font-weight: 600; }
+
+/* Phones: stop the page zooming in when you tap into a box (chat, search, forms).
+   iPhone and some Android browsers zoom in on any text box whose text is smaller than 16px,
+   so on touch screens every box gets 16px text. Pinch-to-zoom still works for anyone who wants it. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  textarea, select, [contenteditable="true"] { font-size: 16px !important; }
+}
