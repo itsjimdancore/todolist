@@ -26,7 +26,7 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
         <TitleField key={t.id} value={t.text} canEdit={canEdit} onSave={on.text} />
       </div>
       <OverallRating key={`r-${t.id}`} task={t} canEdit={canEdit} onSave={on.rating} />
-      <StepsField key={`s-${t.id}`} value={stepsOf(t)} canEdit={canEdit} onSave={on.steps} onUngroup={on.ungroup} />
+      <StepsField key={`s-${t.id}`} value={stepsOf(t)} canEdit={canEdit} onSave={on.steps} />
       {/* links added before steps had their own: still shown (and removable), but no longer added here */}
       <TaskLinks links={t.links} canEdit={canEdit} onRemove={on.removeLink} />
       <dl className="cal-panel-d">
@@ -129,8 +129,7 @@ const withKeys = (steps) => (steps.length ? steps : [emptyStep()]).map((s) => ({
 
 // "What's going to be done", step by step. Each step: what (a line), where (a line), Open in Maps above them on
 // the right, and a link if wanted. + adds another step. Saved when you click away from a field.
-// onUngroup (optional): (out, keep) takes the steps in `out` out into tasks of their own, leaving `keep`
-function StepsField({ value, canEdit, onSave, onUngroup }) {
+function StepsField({ value, canEdit, onSave }) {
   const [steps, setSteps] = useState(() => withKeys(value));
   const [badUrl, setBadUrl] = useState(null); // key of the step whose link isn't a web address
   const saved = JSON.stringify(value);
@@ -186,14 +185,6 @@ function StepsField({ value, canEdit, onSave, onUngroup }) {
     setSteps(next);
     save(next);
   };
-  // ungroup one step: it becomes a task of its own in the list, and leaves this task's steps
-  const ungroup = (key) => {
-    const s = steps.find((x) => x.key === key);
-    const rest = steps.filter((x) => x.key !== key);
-    if (s.url.trim() && !normalizeUrl(s.url)) return setBadUrl(key);
-    setSteps(rest.length ? rest : withKeys([]));
-    onUngroup([{ ...s, url: normalizeUrl(s.url) || '' }], rest);
-  };
   const enterBlurs = (e) => e.key === 'Enter' && e.currentTarget.blur();
 
   return (
@@ -217,10 +208,6 @@ function StepsField({ value, canEdit, onSave, onUngroup }) {
               </span>
             )}
             <span className="step-gap" />
-            {onUngroup && s.text.trim() && (
-              <button type="button" className="ic step-out" onClick={() => ungroup(s.key)}
-                title="Ungroup: make this step a task of its own" aria-label={`Make step ${i + 1} a task of its own`}>⇱ Own task</button>
-            )}
             {(steps.length > 1 || s.text || s.location || s.url) && (
               <button type="button" className="ic step-x" onClick={() => remove(s.key)} aria-label={`Remove step ${i + 1}`}>✕</button>
             )}

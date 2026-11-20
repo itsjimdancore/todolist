@@ -4,10 +4,13 @@ import { friendlyError } from '@/lib/firebase';
 import {
   addTaskLink,
   deleteTask,
-  groupTasks,
+  groupIntoList,
+  groupIntoNewList,
+  isUnplaced,
   removeTaskLink,
-  ungroupSteps,
   renameList,
+  ungroupToUnplaced,
+  ungroupTask,
   updateTask,
   watchComments,
   watchTasks,
@@ -17,11 +20,11 @@ import { shownName } from '@/lib/people';
 import PeopleStack from './PeopleStack';
 import BackLink from './BackLink';
 import { byDue, dueLabel, monthLabel } from '@/lib/dates';
-import { stepsOf, stepsPatch } from '@/lib/steps';
-import GroupTasks from './GroupTasks';
+import { stepsPatch } from '@/lib/steps';
 import { useToast } from './Toast';
 import AddTask from './AddTask';
 import TaskItem from './TaskItem';
+import GroupTasks from './GroupTasks';
 import Comments from './Comments';
 import { unreadCount, useCommentsSeen } from '@/lib/useCommentsSeen';
 import ShareModal from './ShareModal';
@@ -29,7 +32,9 @@ import Loading from './Loading';
 import TaskDetails from './TaskDetails';
 import { inDropdown } from './Select';
 
-export default function ListView({ list, role, user, contacts, back, focusComments = null, onLeave, onDelete, onArchive, menu }) {
+// lists: my open lists (from My List), so a task can be grouped into one of them, or ungrouped back to where it was
+// unplacedExists: I already have an Unplaced list (where a task that wasn't grouped goes when it's ungrouped)
+export default function ListView({ list, role, user, contacts, back, lists = [], unplacedExists = false, focusComments = null, onLeave, onDelete, onArchive, menu }) {
   const toast = useToast();
   const write = canWrite(role);
   const comment = canComment(role);
@@ -45,7 +50,7 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(list.title);
   const [openId, setOpenId] = useState(null); // the task whose details popup is open
-  const [groupFrom, setGroupFrom] = useState(null); // the task whose "Group with…" dialog is open
+  const [groupFrom, setGroupFrom] = useState(null); // the task whose "Group into a list" dialog is open
 
   useEffect(() => setTitle(list.title), [list.title]);
 
@@ -99,6 +104,11 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
   const named = Object.fromEntries((contacts || []).map((c) => [c.email, c]));
   const everyone = [ownerPerson, ...members.map((m) => ({ email: m.email, displayName: named[m.email]?.displayName }))];
 
+  // the lists a task here can be grouped into: my other open lists that I can change
+  const groupLists = lists.filter((l) => l.id !== list.id && canWrite(l.role) && !l.archived && !isUnplaced(l));
+  // where a grouped task goes back to when it's ungrouped: the list it came from, if it's still there to change
+  const originOf = (t) => (t.fromListId ? lists.find((l) => l.id === t.fromListId && canWrite(l.role) && !l.archived) || null : null);
+
   const taskProps = (t) => ({
     task: t,
     write,
@@ -122,22 +132,36 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
     onAddLink: (link) => run(addTaskLink(list, t, user, link), 'Link added'),
     onRemoveLink: (link) => run(removeTaskLink(list, t, user, link), 'Link removed'),
     onGroup: () => setGroupFrom(t),
-    // every step becomes its own task again; the task stays, with no steps
-    onUngroup: () => {
-      const out = stepsOf(t);
-      run(ungroupSteps(list, t, user, out, []), `${out.length} step${out.length === 1 ? '' : 's'} made into tasks`);
+    // back to the list it came from (with Undo, which groups it here again)
+    // takes it out of this list: back to the list it was grouped from, or (if it wasn't grouped, or that list is
+    // gone) into Unplaced on My List, from where it can be put in a list again
+    onUngroup: isUnplaced(list) ? null : () => {
+      const origin = originOf(t);
+      if (origin) {
+        return run(ungroupTask(list, t, origin, user), { title: 'Ungrouped', description: `“${t.text}” is back in “${origin.title}”` });
+      }
+      if (openId === t.id) setOpenId(null);
+      return run(ungroupToUnplaced(list, t, user, unplacedExists), {
+        title: 'Ungrouped',
+        description: `“${t.text}” is out of “${list.title}”, in Unplaced on My List`,
+      });
     },
+    ungroupTo: originOf(t)?.title || (isUnplaced(list) ? '' : 'Unplaced'),
   });
 
-  // resolves true once saved, so the dialog can close (or stay open and show it failed)
-  const group = (chosen, into, newTitle) =>
-    groupTasks(list, user, chosen, into, newTitle)
-      .then(() => {
-        toast(`Grouped into “${into ? into.text : newTitle}”`);
-        if (chosen.some((t) => t.id === openId)) setOpenId(null);
-        return true;
-      })
-      .catch((e) => { toast(`Not saved: ${friendlyError(e)}`, 'err'); return false; });
+  // resolves true once saved, so the dialog can close (or stay open after it failed)
+  const group = async (to, newTitle) => {
+    const t = groupFrom;
+    try {
+      const where = to ? (await groupIntoList(list, t, to, user), to) : await groupIntoNewList(list, t, newTitle, user);
+      if (openId === t.id) setOpenId(null);
+      toast({ title: 'Grouped', description: `“${t.text}” moved to “${where.title}”` });
+      return true;
+    } catch (e) {
+      toast(`Not saved: ${friendlyError(e)}`, 'err');
+      return false;
+    }
+  };
 
   // the popup follows the live task, and goes away if the task is deleted
   const openTask = openId ? (tasks || []).find((t) => t.id === openId) : null;
@@ -150,7 +174,6 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
       location: (location) => (t.location || '') !== location &&
         run(updateTask(list, t, user, { location }), location ? 'Location saved' : 'Location removed'),
       steps: (steps) => run(updateTask(list, t, user, stepsPatch(steps)), 'Saved'),
-      ungroup: (out, keep) => run(ungroupSteps(list, t, user, out, keep), 'Made into a task of its own'),
       due: p.onDue,
       month: p.onMonth,
       rating: (rating) => run(updateTask(list, t, user, { rating }), rating ? `Rated ${rating}/10` : 'Rating removed'),
@@ -290,7 +313,8 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
       )}
 
       {groupFrom && (
-        <GroupTasks start={groupFrom} tasks={active} onGroup={group} onClose={() => setGroupFrom(null)} />
+        <GroupTasks task={groupFrom} list={list} lists={groupLists} onGroup={group} onClose={() => setGroupFrom(null)}
+          onUngroup={taskProps(groupFrom).onUngroup} ungroupTo={taskProps(groupFrom).ungroupTo} />
       )}
 
       {shareOpen && (

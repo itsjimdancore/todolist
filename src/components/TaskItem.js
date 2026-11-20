@@ -5,7 +5,7 @@ import DuePicker from './DuePicker';
 import { AddLink, LinkChips } from './TaskLinks';
 import { StepLines } from './TaskDetails';
 
-export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, onDue, onMonth, onArchive, onDelete, onAddLink, onRemoveLink, onGroup, onUngroup }) {
+export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, onDue, onMonth, onArchive, onDelete, onAddLink, onRemoveLink, onGroup, onUngroup, ungroupTo = '' }) {
   const [editing, setEditing] = useState(false);
   const [linking, setLinking] = useState(false); // the "add a link" form under the task
   const [text, setText] = useState(task.text);
@@ -46,6 +46,7 @@ export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, on
           <span className="t-line">
             <button type="button" className="t-open" onClick={onOpen} title="Open the task's details">{task.text}</button>
             {task.rating > 0 && <span className="t-rate" title="Overall experience">★ {task.rating}/10</span>}
+            {task.fromListId && ungroupTo && ungroupTo !== 'Unplaced' && <span className="t-from" title={`Grouped here from “${ungroupTo}”`}>⧉ from {ungroupTo}</span>}
             <LinkChips links={task.links} canEdit={write && !task.archived} onRemove={onRemoveLink} />
           </span>
         )}
@@ -59,14 +60,15 @@ export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, on
       <span className="by" title={`Updated ${timeAgo(task.updatedAt)}${edited}`}>{by}</span>
       {write && (
         <TaskMenu task={task} onEdit={startEdit} onOpen={onOpen} onLink={() => setLinking(true)} onArchive={onArchive} onDelete={onDelete}
-          onGroup={onGroup} onUngroup={onUngroup} />
+          onGroup={onGroup} onUngroup={onUngroup} ungroupTo={ungroupTo} />
       )}
     </li>
   );
 }
 
 // The ⋯ on a task opens the same kind of menu as a list's ⋮ (phones and desktop)
-function TaskMenu({ task, onEdit, onOpen, onLink, onArchive, onDelete, onGroup, onUngroup }) {
+// onGroup: put it in another list; onUngroup: take it out of this list, to ungroupTo (where it was grouped from, or Unplaced)
+function TaskMenu({ task, onEdit, onOpen, onLink, onArchive, onDelete, onGroup, onUngroup, ungroupTo }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const box = useRef(null);
@@ -99,9 +101,8 @@ function TaskMenu({ task, onEdit, onOpen, onLink, onArchive, onDelete, onGroup, 
           {item('🔍 Open details', onOpen)}
           {!task.archived && item('✎ Edit task', onEdit)}
           {!task.archived && item('🔗 Add link', onLink)}
-          {/* put this task (and others) together as the steps of one task; or split a task's steps back into tasks */}
-          {!task.archived && onGroup && item('⧉ Group with…', onGroup)}
-          {!task.archived && onUngroup && task.steps?.length > 0 && item('⇱ Ungroup steps', onUngroup)}
+          {!task.archived && onGroup && item('⧉ Group into a list…', onGroup)}
+          {!task.archived && onUngroup && item(ungroupTo === 'Unplaced' ? '⇱ Ungroup (out of this list)' : ungroupTo ? `⇱ Ungroup (back to ${ungroupTo})` : '⇱ Ungroup', onUngroup)}
           {item(task.archived ? '↩ Restore' : '🗄 Archive', onArchive)}
           {confirm
             ? item('🗑 Confirm delete', onDelete, 'danger')

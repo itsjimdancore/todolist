@@ -23,7 +23,7 @@ export default function Unplaced({ list, tasks, lists, user }) {
     <section className="unplaced" aria-labelledby="unplaced-h">
       <div className="unplaced-h">
         <h2 id="unplaced-h">Unplaced <span className="count">{open.length}</span></h2>
-        <p>Added from the Calendar without a list. Put each one in a list when you&apos;re ready.</p>
+        <p>Added from the Calendar without a list, or ungrouped out of one. Put each one in a list when you&apos;re ready.</p>
       </div>
       <ul className="unplaced-rows">
         {open.map((t) => (

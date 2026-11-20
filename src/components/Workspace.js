@@ -37,9 +37,10 @@ import {
   watchNick,
   watchPartnerLists,
   watchSpotify,
+  ungroupTask,
 } from '@/lib/data';
 import { usePartner } from '@/lib/partner';
-import { roleLabel } from '@/lib/permissions';
+import { canWrite, roleLabel } from '@/lib/permissions';
 import { pausePush, refreshPush } from '@/lib/push';
 import { Avatar, colorFor, displayName, nickOf, setNickname, toDate } from '@/lib/people';
 import Board from './Board';
@@ -431,6 +432,14 @@ function WorkspaceInner({ user }) {
 
   // What the ⋮ menu on a list can do
   const actions = {
+    // a task grouped into list l (from another list): back to the list it came from, or, if that list isn't
+    // there to change anymore, it stays in l, no longer marked as grouped
+    ungroup: (l, t) => {
+      const origin = (lists || []).find((x) => x.id === t.fromListId && canWrite(x.role) && !x.archived) || null;
+      report(ungroupTask(l, t, origin, user), origin
+        ? { title: 'Ungrouped', description: `“${t.text}” is back in “${origin.title}”` }
+        : { title: 'Ungrouped', description: `“${t.text}” stays in “${l.title}”: the list it came from isn't there anymore` });
+    },
     rename: (l) => setDialog({ kind: 'rename', id: l.id }),
     favorite: (l) => {
       const on = !favorites.has(l.id);
@@ -686,6 +695,7 @@ function WorkspaceInner({ user }) {
             menu={<ListMenu list={active} favorite={favorites.has(active.id)} actions={actions} />} />
         ) : active ? (
           <ListView key={active.id} list={active} role={active.role} user={user} contacts={contacts} back={back}
+            lists={openLists} unplacedExists={!!unplaced}
             focusComments={focusComments?.id === active.id ? focusComments.at : null}
             onLeave={actions.leave} onDelete={actions.remove} onArchive={actions.archive}
             menu={<ListMenu list={active} favorite={favorites.has(active.id)} actions={actions} />} />

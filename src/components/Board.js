@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { linkLabel } from '@/lib/links';
-import { roleLabel } from '@/lib/permissions';
+import { canWrite, roleLabel } from '@/lib/permissions';
 import { Avatar, colorFor, shownName, timeAgo } from '@/lib/people';
 import ListMenu from './ListMenu';
 import Loading from './Loading';
@@ -200,6 +200,8 @@ function BoardCard({ list, tasks = null, favorite, actions, onOpen, dragging, gr
   const open = (tasks || []).filter((t) => !t.archived);
   const done = open.filter((t) => t.done).length;
   const pct = open.length ? Math.round((done / open.length) * 100) : 0;
+  // tasks grouped into this list from another one: each can be ungrouped (sent back) right here
+  const grouped = list.archived || !canWrite(list.role) ? [] : open.filter((t) => t.fromListId);
   const people = [{ email: list.ownerEmail, displayName: list.ownerName }, ...(list.memberEmails || []).map((email) => ({ email }))];
 
   // A click anywhere on the card opens the list. The drag handle and ⋮ menu keep their own clicks,
@@ -260,6 +262,23 @@ function BoardCard({ list, tasks = null, favorite, actions, onOpen, dragging, gr
           {open.filter((t) => !t.done).slice(0, 3).map((t) => <li key={t.id}>{t.text}</li>)}
           {tasks && open.length === done && <li className="muted">{open.length ? 'All done 🎉' : 'No tasks yet'}</li>}
         </ul>
+      )}
+
+      {grouped.length > 0 && !match && (
+        <div className="bcard-grouped">
+          <span className="bcard-grouped-h">⧉ Grouped here</span>
+          <ul>
+            {grouped.map((t) => (
+              <li key={t.id}>
+                <span className="bcard-grouped-t" title={t.fromListTitle ? `From “${t.fromListTitle}”` : undefined}>
+                  {t.text}{t.fromListTitle && <span className="muted"> · from {t.fromListTitle}</span>}
+                </span>
+                <button type="button" className="btn small" onClick={() => actions.ungroup(list, t)}
+                  aria-label={`Ungroup “${t.text}”${t.fromListTitle ? `, back to “${t.fromListTitle}”` : ''}`}>⇱ Ungroup</button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <div className="bcard-f">
