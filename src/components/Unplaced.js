@@ -4,6 +4,7 @@ import { createList, deleteTask, moveTask, updateTask } from '@/lib/data';
 import { dueLabel, isOverdue, monthLabel, timeRange } from '@/lib/dates';
 import { friendlyError } from '@/lib/firebase';
 import { canWrite } from '@/lib/permissions';
+import Feedback from './Feedback';
 import Select from './Select';
 import { PinIcon } from './TaskDetails';
 import { useToast } from './Toast';
@@ -19,6 +20,7 @@ export default function Unplaced({ list, tasks, lists, user }) {
   const [naming, setNaming] = useState(null); // the task being put in a new list: its id
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [fbOpen, setFbOpen] = useState(null); // the task whose feedback is showing: its id
   const open = (tasks || []).filter((t) => !t.archived)
     .sort((a, b) => a.done - b.done || (a.due || '9999').localeCompare(b.due || '9999') || (a.start || '').localeCompare(b.start || ''));
   if (!list || !open.length) return null;
@@ -61,6 +63,9 @@ export default function Unplaced({ list, tasks, lists, user }) {
                 ) : t.month ? <span className={isOverdue(t) ? 'late-txt' : ''}>{monthLabel(t.month)}</span> : 'No date'}
                 {t.location && <span className="up-loc"><PinIcon />{t.location}</span>}
               </span>
+              {/* feedback stays with a task wherever it is, Unplaced too */}
+              <button type="button" className={fbOpen === t.id ? 't-fb-btn on' : 't-fb-btn'} aria-expanded={fbOpen === t.id}
+                onClick={() => setFbOpen(fbOpen === t.id ? null : t.id)}>💬 Feedback</button>
             </div>
             <div className="up-acts">
               {naming === t.id ? (
@@ -96,6 +101,7 @@ export default function Unplaced({ list, tasks, lists, user }) {
                 </button>
               )}
             </div>
+            {fbOpen === t.id && <div className="t-fb up-fb"><Feedback list={list} task={t} user={user} isOwner /></div>}
           </li>
         ))}
       </ul>

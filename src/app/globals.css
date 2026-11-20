@@ -3078,3 +3078,8 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .fb-new textarea { resize: vertical; min-height: 56px; font-size: 14px; }
 .fb-new-f { display: flex; justify-content: flex-end; }
 @media (max-width: 640px) { .t-fb { padding-left: 0; } .fb-replies { margin-left: 16px; } }
+/* Unplaced: feedback under the task, the row's full width */
+.up-r:has(.up-fb) { flex-wrap: wrap; }
+.up-b .t-fb-btn { align-self: flex-start; }
+.t-fb.up-fb { padding-left: 30px; }
+@media (max-width: 640px) { .t-fb.up-fb { padding-left: 0; } }
