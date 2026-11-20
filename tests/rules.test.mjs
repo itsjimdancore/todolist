@@ -1046,3 +1046,75 @@ describe('partners', () => {
     }));
   });
 });
+
+describe('task feedback', () => {
+  const fbCol = (db, list = LIST, t = 't1') => collection(db, 'lists', list, 'tasks', t, 'feedback');
+  const fb = (who, extra = {}) => ({
+    text: 'Loved it', rating: 8, userId: people[who].uid, userName: who, userEmail: people[who].email,
+    createdAt: serverTimestamp(), ...extra,
+  });
+  beforeEach(() => env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'lists', LIST, 'tasks', 't1', 'feedback', 'f1'), { ...fb('commenter'), createdAt: new Date() });
+    // another list, rw's own, to move the task into
+    await setDoc(doc(db, 'lists', 'list2'), {
+      title: 'Other', ownerId: 'rw', ownerEmail: 'rw@test.com', ownerName: 'RW', roles: {}, memberEmails: [],
+      createdAt: new Date(), updatedAt: new Date(),
+    });
+  }));
+
+  for (const who of ['owner', 'commenter', 'rw']) {
+    test(`${who} can read and post feedback`, async () => {
+      await assertSucceeds(getDocs(fbCol(as(who))));
+      await assertSucceeds(addDoc(fbCol(as(who)), fb(who)));
+    });
+  }
+  for (const who of ['reader', 'writer', 'stranger']) {
+    test(`${who} cannot read or post feedback`, async () => {
+      await assertFails(getDocs(fbCol(as(who))));
+      await assertFails(addDoc(fbCol(as(who)), fb(who)));
+    });
+  }
+  test('a rating alone, or words alone, is fine', async () => {
+    await assertSucceeds(addDoc(fbCol(as('commenter')), fb('commenter', { text: '' })));
+    await assertSucceeds(addDoc(fbCol(as('commenter')), fb('commenter', { rating: 0 })));
+  });
+  test('neither a rating nor words is rejected', () =>
+    assertFails(addDoc(fbCol(as('commenter')), fb('commenter', { text: '', rating: 0 }))));
+  test('rating must be 0 to 10', () => assertFails(addDoc(fbCol(as('commenter')), fb('commenter', { rating: 11 }))));
+  test('cannot post as someone else', () => assertFails(addDoc(fbCol(as('commenter')), fb('owner'))));
+  test('cannot post on a task that is not there', () =>
+    assertFails(addDoc(fbCol(as('commenter'), LIST, 'nope'), fb('commenter'))));
+  test('can reply with words', () =>
+    assertSucceeds(addDoc(fbCol(as('owner')), fb('owner', { rating: 0, text: 'Glad!', replyTo: 'f1' }))));
+  test('a reply has no rating', () =>
+    assertFails(addDoc(fbCol(as('owner')), fb('owner', { rating: 5, text: 'Glad!', replyTo: 'f1' }))));
+  test('delete your own feedback, not someone else’s', async () => {
+    await assertFails(deleteDoc(doc(as('rw'), 'lists', LIST, 'tasks', 't1', 'feedback', 'f1')));
+    await assertSucceeds(deleteDoc(doc(as('commenter'), 'lists', LIST, 'tasks', 't1', 'feedback', 'f1')));
+  });
+  test('the owner can delete anyone’s feedback', () =>
+    assertSucceeds(deleteDoc(doc(as('owner'), 'lists', LIST, 'tasks', 't1', 'feedback', 'f1'))));
+
+  test('moving a task to another list copies its feedback unchanged, then the old copy can go', async () => {
+    const db = as('rw');
+    await assertSucceeds(setDoc(doc(db, 'lists', 'list2', 'tasks', 't1'), task('rw')));
+    const original = (await getDoc(doc(db, 'lists', LIST, 'tasks', 't1', 'feedback', 'f1'))).data();
+    // a changed copy is refused; the same words and rating by the same person are fine
+    await assertFails(setDoc(doc(db, 'lists', 'list2', 'tasks', 't1', 'feedback', 'f1'), { ...original, text: 'Hated it', movedFrom: LIST }));
+    await assertSucceeds(setDoc(doc(db, 'lists', 'list2', 'tasks', 't1', 'feedback', 'f1'), { ...original, movedFrom: LIST }));
+    // the old feedback can't be cleared while the task is still there, only once it has gone
+    await assertFails(deleteDoc(doc(db, 'lists', LIST, 'tasks', 't1', 'feedback', 'f1')));
+    await assertSucceeds(deleteDoc(doc(db, 'lists', LIST, 'tasks', 't1')));
+    await assertSucceeds(deleteDoc(doc(db, 'lists', LIST, 'tasks', 't1', 'feedback', 'f1')));
+  });
+  test('cannot copy in feedback that does not exist', () =>
+    assertFails(setDoc(doc(as('rw'), 'lists', 'list2', 'tasks', 't1', 'feedback', 'zzz'), { ...fb('owner'), movedFrom: LIST })));
+  test('deleting a task and its feedback together works for a writer', async () => {
+    const db = as('rw');
+    const b = writeBatch(db);
+    b.delete(doc(db, 'lists', LIST, 'tasks', 't1'));
+    b.delete(doc(db, 'lists', LIST, 'tasks', 't1', 'feedback', 'f1'));
+    await assertSucceeds(b.commit());
+  });
+});

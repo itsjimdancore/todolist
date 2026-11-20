@@ -3055,3 +3055,26 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .up-new { display: flex; align-items: center; gap: 6px; }
 .up-new input { width: 170px; height: 32px; font-size: 13px; }
 @media (max-width: 640px) { .up-new { flex: 1; } .up-new input { flex: 1; width: auto; } }
+
+/* ---- feedback on a task: the small button on the row, and the panel under it */
+.t-fb-btn { margin-top: 4px; padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 12px; color: var(--muted); }
+.t-fb-btn:hover, .t-fb-btn.on { color: var(--fg); border-color: var(--accent); }
+.t-fb { flex-basis: 100%; padding: 4px 0 6px 28px; }
+.fb { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--bg); }
+.fb-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.fb-avg, .fb-rate { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.fb-list, .fb-replies { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.fb-replies { margin: 8px 0 0 36px; padding-left: 10px; border-left: 2px solid var(--line); gap: 8px; }
+.fb-e { display: flex; gap: 8px; align-items: flex-start; }
+.fb-b { flex: 1; min-width: 0; }
+.fb-who { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13px; }
+.fb-who .muted { font-size: 12px; }
+.fb-t { margin: 2px 0 0; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fb-acts { display: flex; gap: 12px; font-size: 12px; margin-top: 2px; }
+.fb-acts .link.danger { color: var(--danger); }
+.fb-reply { display: flex; gap: 6px; }
+.fb-reply input { flex: 1; min-width: 0; height: 32px; font-size: 13px; }
+.fb-new { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.fb-new textarea { resize: vertical; min-height: 56px; font-size: 14px; }
+.fb-new-f { display: flex; justify-content: flex-end; }
+@media (max-width: 640px) { .t-fb { padding-left: 0; } .fb-replies { margin-left: 16px; } }

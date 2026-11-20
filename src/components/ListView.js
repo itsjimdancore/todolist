@@ -25,6 +25,7 @@ import { useToast } from './Toast';
 import AddTask from './AddTask';
 import TaskItem from './TaskItem';
 import GroupTasks from './GroupTasks';
+import Feedback from './Feedback';
 import Comments from './Comments';
 import { unreadCount, useCommentsSeen } from '@/lib/useCommentsSeen';
 import ShareModal from './ShareModal';
@@ -147,6 +148,8 @@ export default function ListView({ list, role, user, contacts, back, lists = [],
       });
     },
     ungroupTo: originOf(t)?.title || (isUnplaced(list) ? '' : 'Unplaced'),
+    // rate the experience, say how it was, reply to each other: whoever can comment on the list
+    feedback: comment ? () => <Feedback list={list} task={t} user={user} isOwner={isOwner} /> : null,
   });
 
   // resolves true once saved, so the dialog can close (or stay open after it failed)

@@ -356,6 +356,46 @@ service cloud.firestore {
           && request.resource.data.createdBy == resource.data.createdBy
           && request.resource.data.createdAt == resource.data.createdAt;
         allow delete: if canWrite(effRole(listData(listId)));
+
+        // ---------- feedback on a task: a rating of the experience (1-10) and/or words, and replies ----------
+        // Seen and written by whoever can comment on the list. A reply (replyTo: the feedback it answers) is
+        // words only. Moving the task to another list copies its feedback there unchanged (movedFrom: the list
+        // it came from, checked against the original), and the old copies go once the task has left.
+        match /feedback/{fid} {
+          function taskThere() {
+            return existsAfter(/databases/$(database)/documents/lists/$(listId)/tasks/$(taskId));
+          }
+          function validFeedback(d) {
+            return d.keys().hasOnly(['text', 'rating', 'replyTo', 'userId', 'userName', 'userEmail', 'createdAt'])
+              && d.text is string && d.text.size() <= 2000
+              && d.rating is int && d.rating >= 0 && d.rating <= 10
+              && (d.text.size() >= 1 || d.rating >= 1)
+              && (d.get('replyTo', null) == null
+                || (d.replyTo is string && d.replyTo.size() >= 1 && d.replyTo.size() <= 128 && d.rating == 0 && d.text.size() >= 1))
+              && d.userName is string && d.userName.size() <= 120
+              && d.userEmail is string && d.userEmail.size() <= 320;
+          }
+          function copiedUnchanged(d) {
+            return d.movedFrom is string && d.movedFrom != listId
+              && d.diff(get(/databases/$(database)/documents/lists/$(d.movedFrom)/tasks/$(taskId)/feedback/$(fid)).data)
+                   .affectedKeys().hasOnly(['movedFrom']);
+          }
+
+          allow read: if canComment(effRole(listData(listId)));
+          allow create: if taskThere() && (
+            (canComment(effRole(listData(listId)))
+              && validFeedback(request.resource.data)
+              && request.resource.data.userId == request.auth.uid
+              && request.resource.data.createdAt == request.time)
+            || (canWrite(effRole(listData(listId))) && copiedUnchanged(request.resource.data))
+          );
+          // your own; the owner can tidy any; and once the task has gone (deleted or moved), its feedback
+          allow delete: if signedIn() && (
+            resource.data.userId == request.auth.uid
+            || listData(listId).ownerId == request.auth.uid
+            || (canWrite(effRole(listData(listId))) && !taskThere())
+          );
+        }
       }
 
       // ---------- comments ----------

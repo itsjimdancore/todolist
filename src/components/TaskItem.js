@@ -5,8 +5,9 @@ import DuePicker from './DuePicker';
 import { AddLink, LinkChips } from './TaskLinks';
 import { StepLines } from './TaskDetails';
 
-export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, onDue, onMonth, onArchive, onDelete, onAddLink, onRemoveLink, onGroup, onUngroup, ungroupTo = '' }) {
+export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, onDue, onMonth, onArchive, onDelete, onAddLink, onRemoveLink, onGroup, onUngroup, ungroupTo = '', feedback = null }) {
   const [editing, setEditing] = useState(false);
+  const [fbOpen, setFbOpen] = useState(false); // the feedback under the task (feedback: draws it, if I can see it)
   const [linking, setLinking] = useState(false); // the "add a link" form under the task
   const [text, setText] = useState(task.text);
 
@@ -51,6 +52,11 @@ export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, on
           </span>
         )}
         {!editing && <StepLines task={task} />}
+        {!editing && feedback && (
+          <button type="button" className={fbOpen ? 't-fb-btn on' : 't-fb-btn'} onClick={() => setFbOpen((o) => !o)} aria-expanded={fbOpen}>
+            💬 Feedback
+          </button>
+        )}
         {!editing && linking && write && !task.archived && (
           <div className="task-links"><AddLink links={task.links} onAdd={onAddLink} setAdding={setLinking} /></div>
         )}
@@ -62,6 +68,7 @@ export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, on
         <TaskMenu task={task} onEdit={startEdit} onOpen={onOpen} onLink={() => setLinking(true)} onArchive={onArchive} onDelete={onDelete}
           onGroup={onGroup} onUngroup={onUngroup} ungroupTo={ungroupTo} />
       )}
+      {fbOpen && feedback && <div className="t-fb">{feedback()}</div>}
     </li>
   );
 }

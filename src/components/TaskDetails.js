@@ -258,7 +258,7 @@ function StepsField({ value, canEdit, onSave }) {
 // onCommit runs when it's let go of (pointer, key or focus leaving), which is when it's saved.
 // On phones a drag can end without a pointerup (it turns into a scroll) and the slider may never get focus, so
 // it also saves itself a moment after the last change. (Saving twice is harmless: unchanged, nothing is sent.)
-function RatingSlider({ value, onChange, onCommit, ariaLabel, title = 'Rate the experience', hint = null }) {
+export function RatingSlider({ value, onChange, onCommit, ariaLabel, title = 'Rate the experience', hint = null }) {
   const latest = useRef(onCommit);
   latest.current = onCommit; // the timer saves with this render's (up-to-date) values
   const timer = useRef(null);

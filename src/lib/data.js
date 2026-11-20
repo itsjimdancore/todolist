@@ -5,6 +5,7 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
+  deleteDoc,
   deleteField,
   doc,
   getDoc,
@@ -25,6 +26,8 @@ const db = () => fb().db;
 const listRef = (id) => doc(db(), 'lists', id);
 const tasksCol = (id) => collection(db(), 'lists', id, 'tasks');
 const commentsCol = (id) => collection(db(), 'lists', id, 'comments');
+// feedback on a task: lists/{listId}/tasks/{taskId}/feedback (see "feedback" below)
+const feedbackCol = (listId, taskId) => collection(db(), 'lists', listId, 'tasks', taskId, 'feedback');
 const roleField = (email) => new FieldPath('roles', email);
 
 export const emailOf = (user) => (user.email || '').toLowerCase();
@@ -612,18 +615,43 @@ export const addTaskLink = (list, task, user, link) =>
 export const removeTaskLink = (list, task, user, link) =>
   updateTask(list, task, user, { links: arrayRemove(link) }, 'task-unlink', link.title || link.url);
 
-// Move a task to another list (placing an Unplaced task): the same task in the new list, gone from the old one.
-// Its comments-free fields come along as they are; it counts as added to the new list.
+// A task's feedback, if I can see it (people who can't comment can't): [] otherwise
+async function feedbackOf(listId, taskId) {
+  try { return (await getDocs(feedbackCol(listId, taskId))).docs; } catch { return []; }
+}
+
+// Move a task to another list (placing an Unplaced task): the same task (same id) in the new list, gone from the
+// old one. Its fields come along as they are, and its feedback too; it counts as added to the new list.
 // extra: fields to add on the way (grouping marks where it came from); any old grouping mark is dropped.
-export function moveTask(from, task, to, user, extra = {}) {
+// With feedback it's done in steps (the database checks each copied feedback against the original, and only
+// allows so many checks at once): the task first, then its feedback a few at a time, then the old one goes.
+export async function moveTask(from, task, to, user, extra = {}) {
   const { id, fromListId, fromListTitle, ...fields } = task; // the grouping mark is set again by `extra` if needed
+  const fbs = await feedbackOf(from.id, id);
   const b = writeBatch(db());
-  b.set(doc(tasksCol(to.id)), { ...fields, ...extra, createdBy: user.uid, createdByName: fields.createdByName || nameOf(user), ...stamp(user) });
-  b.delete(doc(tasksCol(from.id), id));
+  b.set(doc(tasksCol(to.id), id), { ...fields, ...extra, createdBy: user.uid, createdByName: fields.createdByName || nameOf(user), ...stamp(user) });
+  if (!fbs.length) b.delete(doc(tasksCol(from.id), id));
   b.update(listRef(to.id), { updatedAt: serverTimestamp() });
   b.update(listRef(from.id), { updatedAt: serverTimestamp() });
   notify(b, to, user, 'task-add', { text: task.text, detail: task.due || '' });
-  return send(b);
+  await send(b);
+  if (!fbs.length) return;
+  for (let i = 0; i < fbs.length; i += 5) {
+    const c = writeBatch(db());
+    for (const f of fbs.slice(i, i + 5)) c.set(doc(feedbackCol(to.id, id), f.id), { ...f.data(), movedFrom: from.id });
+    await c.commit();
+  }
+  await clearTask(from.id, id, fbs);
+}
+
+// The task gone, then its feedback (which only the task's list can tidy once the task isn't there)
+async function clearTask(listId, taskId, fbs) {
+  await deleteDoc(doc(tasksCol(listId), taskId));
+  for (let i = 0; i < fbs.length; i += 100) {
+    const c = writeBatch(db());
+    for (const f of fbs.slice(i, i + 100)) c.delete(f.ref);
+    await c.commit();
+  }
 }
 
 // ---- grouping: a task put into another list (one of mine, or a new one), remembering the list it came from
@@ -663,13 +691,41 @@ export async function ungroupToUnplaced(list, task, user, exists) {
   return to;
 }
 
-export function deleteTask(list, task, user) {
+// its feedback goes too
+export async function deleteTask(list, task, user) {
+  const fbs = await feedbackOf(list.id, task.id);
   const b = writeBatch(db());
   b.delete(doc(tasksCol(list.id), task.id));
+  for (const f of fbs.slice(0, 400)) b.delete(f.ref);
   b.update(listRef(list.id), { updatedAt: serverTimestamp() });
   notify(b, list, user, 'task-delete', { text: task.text });
-  return send(b);
+  await send(b);
+  if (fbs.length > 400) await clearTask(list.id, task.id, fbs.slice(400));
 }
+
+// ---------- feedback on a task ----------
+// Anyone who can comment on the list can rate the experience (1-10) and/or say how it was, and reply to
+// someone's feedback (replyTo: that feedback's id; a reply is words only, no rating). Your own feedback (and,
+// for the list's owner, anyone's) can be deleted. { text, rating, replyTo?, userId, userName, userEmail, createdAt }
+export const MAX_FEEDBACK = 2000;
+
+export function watchFeedback(listId, taskId, onData, onError) {
+  return onSnapshot(query(feedbackCol(listId, taskId), orderBy('createdAt', 'asc')), (s) => onData(withId(s)), onError);
+}
+
+export function addFeedback(list, task, user, { text = '', rating = 0, replyTo = null }) {
+  return addDoc(feedbackCol(list.id, task.id), {
+    text: text.trim().slice(0, MAX_FEEDBACK),
+    rating: replyTo ? 0 : Math.max(0, Math.min(10, Math.round(rating) || 0)),
+    ...(replyTo ? { replyTo } : {}),
+    userId: user.uid,
+    userName: nameOf(user).slice(0, 120),
+    userEmail: emailOf(user),
+    createdAt: serverTimestamp(),
+  });
+}
+
+export const deleteFeedback = (list, task, fb) => deleteDoc(doc(feedbackCol(list.id, task.id), fb.id));
 
 // ---------- comments ----------
 export function watchComments(listId, onData, onError) {
