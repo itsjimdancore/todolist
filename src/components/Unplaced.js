@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { deleteTask, moveTask, updateTask } from '@/lib/data';
+import { createList, deleteTask, moveTask, updateTask } from '@/lib/data';
 import { dueLabel, isOverdue, monthLabel, timeRange } from '@/lib/dates';
 import { friendlyError } from '@/lib/firebase';
 import { canWrite } from '@/lib/permissions';
@@ -8,16 +8,39 @@ import Select from './Select';
 import { PinIcon } from './TaskDetails';
 import { useToast } from './Toast';
 
-// My List: tasks added (from the Calendar) without a list. Each can be ticked off, put in a list, or deleted.
+const NEW = '__new__';
+
+// My List: tasks added (from the Calendar) without a list. Each can be ticked off, put in a list (one of mine, or a
+// new one named right there), or deleted.
 // list: the Unplaced list · tasks: its tasks · lists: lists a task can be placed in
 export default function Unplaced({ list, tasks, lists, user }) {
   const toast = useToast();
   const [confirm, setConfirm] = useState(null);
+  const [naming, setNaming] = useState(null); // the task being put in a new list: its id
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
   const open = (tasks || []).filter((t) => !t.archived)
     .sort((a, b) => a.done - b.done || (a.due || '9999').localeCompare(b.due || '9999') || (a.start || '').localeCompare(b.start || ''));
   if (!list || !open.length) return null;
   const targets = lists.filter((l) => canWrite(l.role) && !l.archived);
   const run = (p, ok) => p.then(() => ok && toast(ok)).catch((e) => toast(`Not saved: ${friendlyError(e)}`, 'err'));
+
+  // make the list, then move the task into it
+  async function toNewList(e, t) {
+    e.preventDefault();
+    const title = name.trim();
+    if (!title || busy) return;
+    setBusy(true);
+    try {
+      const id = await createList(user, title);
+      await moveTask(list, t, { id, title, ownerId: user.uid, ownerEmail: (user.email || '').toLowerCase(), roles: {} }, user);
+      toast(`Moved to the new list “${title}”`);
+      setNaming(null); setName('');
+    } catch (err) {
+      toast(`Not saved: ${friendlyError(err)}`, 'err');
+    }
+    setBusy(false);
+  }
 
   return (
     <section className="unplaced" aria-labelledby="unplaced-h">
@@ -40,13 +63,25 @@ export default function Unplaced({ list, tasks, lists, user }) {
               </span>
             </div>
             <div className="up-acts">
-              {targets.length > 0 && (
+              {naming === t.id ? (
+                <form className="up-new" onSubmit={(e) => toNewList(e, t)}>
+                  <input autoFocus maxLength={120} value={name} onChange={(e) => setName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Escape' && setNaming(null)}
+                    placeholder="New list's name" aria-label={`Name the new list for “${t.text}”`} />
+                  <button type="submit" className="btn small primary" disabled={busy || !name.trim()}>{busy ? 'Creating…' : 'Create'}</button>
+                  <button type="button" className="btn small" onClick={() => setNaming(null)}>Cancel</button>
+                </form>
+              ) : (
                 <Select className="up-place" value={null} label={`Put “${t.text}” in a list`} placement="bottom end"
                   placeholder="Place in a list" onChange={(id) => {
+                    if (id === NEW) { setName(''); setNaming(t.id); return; }
                     const to = targets.find((l) => l.id === id);
                     if (to) run(moveTask(list, t, to, user), `Moved to “${to.title}”`);
                   }}
-                  options={targets.map((l) => ({ value: l.id, label: l.title }))} />
+                  options={[
+                    ...targets.map((l) => ({ value: l.id, label: l.title })),
+                    { value: NEW, label: '+ A new list…', divider: targets.length > 0 },
+                  ]} />
               )}
               {confirm === t.id ? (
                 <>

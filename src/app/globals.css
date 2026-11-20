@@ -3051,3 +3051,7 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .bcard-grouped-t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .bcard-grouped .btn { flex: none; }
 .grp-gap { flex: 1; }
+/* Unplaced: naming a new list to put a task in */
+.up-new { display: flex; align-items: center; gap: 6px; }
+.up-new input { width: 170px; height: 32px; font-size: 13px; }
+@media (max-width: 640px) { .up-new { flex: 1; } .up-new input { flex: 1; width: auto; } }
