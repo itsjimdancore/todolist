@@ -4,7 +4,9 @@ import { friendlyError } from '@/lib/firebase';
 import {
   addTaskLink,
   deleteTask,
+  groupTasks,
   removeTaskLink,
+  ungroupSteps,
   renameList,
   updateTask,
   watchComments,
@@ -15,7 +17,8 @@ import { shownName } from '@/lib/people';
 import PeopleStack from './PeopleStack';
 import BackLink from './BackLink';
 import { byDue, dueLabel, monthLabel } from '@/lib/dates';
-import { stepsPatch } from '@/lib/steps';
+import { stepsOf, stepsPatch } from '@/lib/steps';
+import GroupTasks from './GroupTasks';
 import { useToast } from './Toast';
 import AddTask from './AddTask';
 import TaskItem from './TaskItem';
@@ -42,6 +45,7 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(list.title);
   const [openId, setOpenId] = useState(null); // the task whose details popup is open
+  const [groupFrom, setGroupFrom] = useState(null); // the task whose "Group with…" dialog is open
 
   useEffect(() => setTitle(list.title), [list.title]);
 
@@ -117,7 +121,23 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
     onDelete: () => run(deleteTask(list, t, user), 'Task deleted'),
     onAddLink: (link) => run(addTaskLink(list, t, user, link), 'Link added'),
     onRemoveLink: (link) => run(removeTaskLink(list, t, user, link), 'Link removed'),
+    onGroup: () => setGroupFrom(t),
+    // every step becomes its own task again; the task stays, with no steps
+    onUngroup: () => {
+      const out = stepsOf(t);
+      run(ungroupSteps(list, t, user, out, []), `${out.length} step${out.length === 1 ? '' : 's'} made into tasks`);
+    },
   });
+
+  // resolves true once saved, so the dialog can close (or stay open and show it failed)
+  const group = (chosen, into, newTitle) =>
+    groupTasks(list, user, chosen, into, newTitle)
+      .then(() => {
+        toast(`Grouped into “${into ? into.text : newTitle}”`);
+        if (chosen.some((t) => t.id === openId)) setOpenId(null);
+        return true;
+      })
+      .catch((e) => { toast(`Not saved: ${friendlyError(e)}`, 'err'); return false; });
 
   // the popup follows the live task, and goes away if the task is deleted
   const openTask = openId ? (tasks || []).find((t) => t.id === openId) : null;
@@ -130,6 +150,7 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
       location: (location) => (t.location || '') !== location &&
         run(updateTask(list, t, user, { location }), location ? 'Location saved' : 'Location removed'),
       steps: (steps) => run(updateTask(list, t, user, stepsPatch(steps)), 'Saved'),
+      ungroup: (out, keep) => run(ungroupSteps(list, t, user, out, keep), 'Made into a task of its own'),
       due: p.onDue,
       month: p.onMonth,
       rating: (rating) => run(updateTask(list, t, user, { rating }), rating ? `Rated ${rating}/10` : 'Rating removed'),
@@ -266,6 +287,10 @@ export default function ListView({ list, role, user, contacts, back, focusCommen
 
       {openTask && (
         <TaskModal task={openTask} list={list} write={write} on={detailsOn(openTask)} onClose={() => setOpenId(null)} />
+      )}
+
+      {groupFrom && (
+        <GroupTasks start={groupFrom} tasks={active} onGroup={group} onClose={() => setGroupFrom(null)} />
       )}
 
       {shareOpen && (

@@ -3038,3 +3038,16 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   html.chat-full .main > .chat-shell { margin: 0; }
   html.chat-full .chat-scroll { overscroll-behavior: contain; }
 }
+
+/* ---- grouping tasks: "Group with…" dialog, and ⇱ to ungroup a step into its own task */
+.step-out { padding: 2px 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.step-out:hover { color: var(--fg); }
+.grp-set { border: 0; padding: 0; margin: 0; min-width: 0; }
+.grp-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+.grp-list li + li { border-top: 1px solid var(--line); }
+.grp-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; }
+.grp-row:hover { background: var(--sunk); }
+.grp-t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+#group-into, .grp-new { width: 100%; }
+.grp-new { margin-top: 8px; }
+@media (max-width: 640px) { .step-out { min-height: 36px; } }

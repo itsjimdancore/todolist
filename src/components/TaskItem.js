@@ -5,7 +5,7 @@ import DuePicker from './DuePicker';
 import { AddLink, LinkChips } from './TaskLinks';
 import { StepLines } from './TaskDetails';
 
-export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, onDue, onMonth, onArchive, onDelete, onAddLink, onRemoveLink }) {
+export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, onDue, onMonth, onArchive, onDelete, onAddLink, onRemoveLink, onGroup, onUngroup }) {
   const [editing, setEditing] = useState(false);
   const [linking, setLinking] = useState(false); // the "add a link" form under the task
   const [text, setText] = useState(task.text);
@@ -58,14 +58,15 @@ export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, on
         onChange={onDue} onMonth={onMonth} time={task.start || null} />
       <span className="by" title={`Updated ${timeAgo(task.updatedAt)}${edited}`}>{by}</span>
       {write && (
-        <TaskMenu task={task} onEdit={startEdit} onOpen={onOpen} onLink={() => setLinking(true)} onArchive={onArchive} onDelete={onDelete} />
+        <TaskMenu task={task} onEdit={startEdit} onOpen={onOpen} onLink={() => setLinking(true)} onArchive={onArchive} onDelete={onDelete}
+          onGroup={onGroup} onUngroup={onUngroup} />
       )}
     </li>
   );
 }
 
 // The ⋯ on a task opens the same kind of menu as a list's ⋮ (phones and desktop)
-function TaskMenu({ task, onEdit, onOpen, onLink, onArchive, onDelete }) {
+function TaskMenu({ task, onEdit, onOpen, onLink, onArchive, onDelete, onGroup, onUngroup }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const box = useRef(null);
@@ -98,6 +99,9 @@ function TaskMenu({ task, onEdit, onOpen, onLink, onArchive, onDelete }) {
           {item('🔍 Open details', onOpen)}
           {!task.archived && item('✎ Edit task', onEdit)}
           {!task.archived && item('🔗 Add link', onLink)}
+          {/* put this task (and others) together as the steps of one task; or split a task's steps back into tasks */}
+          {!task.archived && onGroup && item('⧉ Group with…', onGroup)}
+          {!task.archived && onUngroup && task.steps?.length > 0 && item('⇱ Ungroup steps', onUngroup)}
           {item(task.archived ? '↩ Restore' : '🗄 Archive', onArchive)}
           {confirm
             ? item('🗑 Confirm delete', onDelete, 'danger')

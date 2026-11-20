@@ -20,6 +20,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { fb } from './firebase';
+import { MAX_STEPS, clampRating, cleanSteps, emptyStep, stepsOf, stepsPatch } from './steps';
 
 const db = () => fb().db;
 const listRef = (id) => doc(db(), 'lists', id);
@@ -621,6 +622,87 @@ export function moveTask(from, task, to, user) {
   b.delete(doc(tasksCol(from.id), id));
   b.update(listRef(to.id), { updatedAt: serverTimestamp() });
   notify(b, to, user, 'task-add', { text: task.text, detail: task.due || '' });
+  return send(b);
+}
+
+// ---- grouping: a task's steps are a group of things to do (see lib/steps.js)
+
+// A step as a task of its own: its text, place, link, day, tick and rating come along
+function stepAsTask(s) {
+  return {
+    text: (s.text || s.location || s.url || 'Step').slice(0, 500),
+    done: !!s.done,
+    ...(s.due ? { due: s.due } : {}),
+    ...(s.location ? { location: s.location.slice(0, 200) } : {}),
+    ...(s.url ? { links: [{ url: s.url, title: '' }] } : {}),
+    ...(s.rating ? { rating: clampRating(s.rating) } : {}),
+  };
+}
+
+// A task as steps in another task: the task itself becomes a step, followed by any steps it had.
+// (Ungrouping that step later gives the task back.)
+export function taskAsSteps(t) {
+  const self = {
+    ...emptyStep(),
+    text: t.text,
+    location: t.location || '',
+    url: t.links?.[0]?.url || '',
+    due: t.due || '',
+    done: !!t.done,
+    rating: clampRating(t.rating),
+  };
+  const own = Array.isArray(t.steps) && t.steps.length ? stepsOf(t) : [];
+  return [self, ...own];
+}
+
+// Ungroup: each step in `out` becomes its own task in the same list; the task keeps the steps in `keep`
+export function ungroupSteps(list, task, user, out, keep) {
+  const b = writeBatch(db());
+  for (const s of cleanSteps(out)) {
+    b.set(doc(tasksCol(list.id)), {
+      ...stepAsTask(s),
+      archived: false,
+      createdBy: user.uid,
+      createdByName: nameOf(user),
+      createdAt: serverTimestamp(),
+      ...stamp(user),
+    });
+  }
+  b.update(doc(tasksCol(list.id), task.id), { ...stepsPatch(keep), ...stamp(user) });
+  b.update(listRef(list.id), { updatedAt: serverTimestamp() });
+  notify(b, list, user, 'task-notes', { text: task.text });
+  return send(b);
+}
+
+// How many steps grouping these tasks into `into` (a task, or null for a new one) would come to
+export const groupedCount = (tasks, into) =>
+  (into ? stepsOf(into).length : 0) + tasks.reduce((n, t) => n + taskAsSteps(t).length, 0);
+
+// Group: the tasks become steps of `into`, or of a new task called `newTitle` when there's no task to put them in.
+// The tasks themselves are removed (they live on as steps). Everything happens at once or not at all.
+export function groupTasks(list, user, tasks, into, newTitle = '') {
+  const steps = [...(into ? stepsOf(into) : []), ...tasks.flatMap(taskAsSteps)];
+  if (steps.length > MAX_STEPS) return Promise.reject(new Error(`A task can hold up to ${MAX_STEPS} steps`));
+  const b = writeBatch(db());
+  if (into) {
+    b.update(doc(tasksCol(list.id), into.id), { ...stepsPatch(steps), ...stamp(user) });
+    notify(b, list, user, 'task-notes', { text: into.text });
+  } else {
+    const text = newTitle.trim().slice(0, 500);
+    b.set(doc(tasksCol(list.id)), {
+      text,
+      done: false,
+      archived: false,
+      ...stepsPatch(steps),
+      createdBy: user.uid,
+      createdByName: nameOf(user),
+      createdAt: serverTimestamp(),
+      ...stamp(user),
+    });
+    notify(b, list, user, 'task-add', { text });
+  }
+  for (const t of tasks) b.delete(doc(tasksCol(list.id), t.id));
+  b.update(listRef(list.id), { updatedAt: serverTimestamp() });
   return send(b);
 }
 
