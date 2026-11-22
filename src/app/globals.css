@@ -3104,3 +3104,23 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .up-b .t-fb-btn { align-self: flex-start; }
 .t-fb.up-fb { padding-left: 30px; }
 @media (max-width: 640px) { .t-fb.up-fb { padding-left: 0; } }
+
+/* A task with an end date (Until): an orange border, green once it's ticked. Drawn inside the box (inset), so
+   nothing moves when it appears. */
+:root { --ranged: #f59e0b; --ranged-done: #22c55e; }
+.chip.ranged, .wk-block.ranged, .task.ranged, .up-r.ranged, .redone-r.ranged {
+  box-shadow: inset 0 0 0 2px var(--ranged); border-radius: 10px;
+}
+.chip.ranged.done, .wk-block.ranged.done, .task.ranged.done, .up-r.ranged.done, .redone-r.ranged.done {
+  box-shadow: inset 0 0 0 2px var(--ranged-done);
+}
+.chip.ranged { border-radius: 999px; }
+.task.ranged, .up-r.ranged { margin: 4px 8px; padding-left: 12px; padding-right: 12px; }
+
+/* Rounds of a re-done task: in its details, and a small "R2" tag on its calendar chips */
+.cal-panel-d .round-h { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--line); font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.cal-panel-d .round-h:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.round-x { margin-left: auto; text-transform: none; letter-spacing: 0; font-family: inherit; }
+.chip-round { flex: none; font-family: var(--mono); font-size: 10px; font-weight: 700; padding: 0 4px; border-radius: 4px; background: var(--sunk); color: var(--muted); }
+.redone-round { font-weight: 600; color: var(--fg); }

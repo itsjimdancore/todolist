@@ -51,6 +51,8 @@ export const daysBetween = (a, b) => Math.round((fromKey(b) - fromKey(a)) / 8640
 // ---- a task can run over several days: from `due` to `until` ('YYYY-MM-DD', after due)
 // its last day
 export const lastDay = (task) => (task.until && task.until > (task.due || '') ? task.until : task.due) || null;
+// it has an end date (an Until): shown with an orange border, green once it's ticked
+export const isRanged = (t) => !!(t?.due && t.until && t.until > t.due);
 // every day it's on, due … until (at most a year of them)
 export function daysOf(task) {
   if (!task.due) return [];
@@ -61,8 +63,14 @@ export function daysOf(task) {
 // 'Mon 3 Nov – Fri 7 Nov' (or just the one day)
 export const rangeLabel = (due, until) => (until && until > due ? `${dueLabel(due)} – ${dueLabel(until)}` : dueLabel(due));
 
-// past its (last) day, or (a month task) past its month
-export const isOverdue = (task) => !task.done && (task.due ? lastDay(task) < todayKey() : !!task.month && task.month < thisMonthKey());
+// past its (last) day, or (a month task) past its month. A re-done task goes by its latest round with a date
+// (see lib/rounds.js).
+export function isOverdue(task) {
+  if (task.done) return false;
+  const r = (Array.isArray(task.rounds) ? task.rounds : []).filter((x) => x.due).pop();
+  if (r) return lastDay(r) < todayKey();
+  return task.due ? lastDay(task) < todayKey() : !!task.month && task.month < thisMonthKey();
+}
 
 // How a list orders its tasks, so setting a date moves the task into place by itself:
 // open tasks with a date (or a month, after that month's days) first, soonest first (so overdue ones are on top); on the same day, all-day ones and

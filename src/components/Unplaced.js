@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { createList, deleteTask, moveTask, updateTask } from '@/lib/data';
-import { isOverdue, monthLabel, rangeLabel, timeRange } from '@/lib/dates';
+import { isOverdue, isRanged, monthLabel, rangeLabel, timeRange } from '@/lib/dates';
 import { friendlyError } from '@/lib/firebase';
 import { canWrite } from '@/lib/permissions';
 import Feedback from './Feedback';
@@ -52,7 +52,7 @@ export default function Unplaced({ list, tasks, lists, user }) {
       </div>
       <ul className="unplaced-rows">
         {open.map((t) => (
-          <li key={t.id} className={t.done ? 'up-r done' : 'up-r'}>
+          <li key={t.id} className={['up-r', t.done && 'done', isRanged(t) && 'ranged'].filter(Boolean).join(' ')}>
             <input type="checkbox" checked={t.done} onChange={() => run(updateTask(list, t, user, { done: !t.done }))}
               aria-label={`Mark “${t.text}” ${t.done ? 'not done' : 'done'}`} />
             <div className="up-b">

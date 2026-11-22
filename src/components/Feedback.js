@@ -49,8 +49,9 @@ export default function Feedback({ list, task, user, isOwner, lists = [], canFil
     if (canFile && saysRedone(fields.text)) {
       try {
         const r = await fileRedone(list, task, user, lists);
-        if (r.moved) toast({ title: 'Re-done', description: `“${task.text}” moved to your “${r.moved.title}” list` });
-        else if (r.marked) toast({ title: 'Re-done', description: `“${task.text}” is on the Re-done tab in My List` });
+        const next = `Unticked, with round ${r.round} ready for its next date.`;
+        if (r.moved) toast({ title: 'Re-done', description: `“${task.text}” moved to your “${r.moved.title}” list. ${next}` });
+        else if (r.marked) toast({ title: 'Re-done', description: `“${task.text}” is on the Re-done tab in My List. ${next}` });
       } catch (err) {
         toast(`Not filed as re-done: ${friendlyError(err)}`, 'err');
       }

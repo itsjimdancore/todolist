@@ -22,6 +22,7 @@ import {
 } from 'firebase/firestore';
 import { fb } from './firebase';
 import { addDays, daysBetween } from './dates';
+import { addRound } from './rounds';
 
 const db = () => fb().db;
 const listRef = (id) => doc(db(), 'lists', id);
@@ -712,20 +713,23 @@ export const saysRedone = (text) => /\bre[\s-]?done\b/i.test(text || '');
 export const redoneListOf = (lists, uid) =>
   (lists || []).find((l) => l.ownerId === uid && l.kind !== 'letter' && !l.archived && l.title?.trim().toLowerCase() === REDONE_TITLE.toLowerCase()) || null;
 
-// resolves to what happened: { moved: list } or { marked: true } (nothing if it was already there)
+// Each time, it's unticked (to do again, until it's ticked, when it shows as Done on the Re-done tab) and gets
+// another round: an empty slot for its next date and time (lib/rounds.js).
+// resolves to what happened: { moved: list, round } or { marked: true, round } (round: its number, 2, 3 …)
 export async function fileRedone(list, task, user, lists) {
+  const again = { done: false, redone: true, rounds: addRound(task) };
+  const round = again.rounds.length + 1;
   if (isUnplaced(list)) {
     let to = redoneListOf(lists, user.uid);
     if (!to) {
       const id = await createList(user, REDONE_TITLE);
       to = { id, title: REDONE_TITLE, ownerId: user.uid, ownerEmail: emailOf(user), roles: {} };
     }
-    await moveTask(list, task, to, user);
-    return { moved: to };
+    await moveTask(list, task, to, user, again);
+    return { moved: to, round };
   }
-  if (task.redone) return {};
-  await updateTask(list, task, user, { redone: true }, null);
-  return { marked: true };
+  await updateTask(list, task, user, again, 'task-undone');
+  return { marked: true, round };
 }
 // take a task off the Re-done tab (it stays in its list)
 export const unmarkRedone = (list, task, user) => updateTask(list, task, user, { redone: deleteField() }, null);

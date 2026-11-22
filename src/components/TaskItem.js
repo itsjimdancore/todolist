@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { shownName, timeAgo } from '@/lib/people';
+import { isRanged } from '@/lib/dates';
+import { currentWhen } from '@/lib/rounds';
 import DuePicker from './DuePicker';
 import { AddLink, LinkChips } from './TaskLinks';
 import { StepLines } from './TaskDetails';
@@ -26,7 +28,7 @@ export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, on
       : '';
 
   return (
-    <li className={['task', task.done && 'done'].filter(Boolean).join(' ')}>
+    <li className={['task', task.done && 'done', isRanged(currentWhen(task)) && 'ranged'].filter(Boolean).join(' ')}>
       <input type="checkbox" checked={task.done} disabled={!write} onChange={onToggle} aria-label="Mark complete" />
       <div className="t">
         {editing ? (

@@ -6,7 +6,8 @@ import { Avatar, colorFor, shownName, timeAgo } from '@/lib/people';
 import ListMenu from './ListMenu';
 import Loading from './Loading';
 import { redoneListOf, unmarkRedone, updateTask } from '@/lib/data';
-import { rangeLabel } from '@/lib/dates';
+import { isRanged, rangeLabel } from '@/lib/dates';
+import { currentWhen, roundsOf } from '@/lib/rounds';
 import { friendlyError } from '@/lib/firebase';
 import { useToast } from './Toast';
 
@@ -66,7 +67,8 @@ export default function Board({ lists, tasksByList, favorites, actions, onOpen, 
   const redoneList = user ? redoneListOf(lists, user.uid) : null;
   const marked = lists.filter((l) => !l.archived && l.id !== redoneList?.id)
     .flatMap((l) => (tasksByList[l.id] || []).filter((t) => t.redone && !t.archived).map((t) => ({ t, l })));
-  const redoneCount = (redoneList ? (tasksByList[redoneList.id] || []).filter((t) => !t.archived).length : 0) + marked.length;
+  // the tab counts what's still to do again
+  const redoneCount = (redoneList ? (tasksByList[redoneList.id] || []).filter((t) => !t.archived && !t.done).length : 0) + marked.filter((e) => !e.t.done).length;
   const count = (k) => (k === 'redone' ? redoneCount : lists.filter(pick[k]).length);
   const shown = lists.filter(pick[tab]); // already in my order
   const shownIds = shown.map((l) => l.id);
@@ -210,73 +212,76 @@ export default function Board({ lists, tasksByList, favorites, actions, onOpen, 
   );
 }
 
-// My List's Re-done tab: my "Re-done" list (where Unplaced tasks go when feedback says they were re-done), then
-// the tasks still in their own lists that feedback said were re-done. Each opens its list, or comes off the tab.
+// My List's Re-done tab: everything feedback said was re-done. The tasks in my "Re-done" list (moved there from
+// Unplaced) and the ones still in their own lists, in two groups: To do again (unticked, waiting for their next
+// round) and Done (ticked again). Saying "re-done" again unticks it, so it comes back up with another round.
 function RedoneTab({ list, tasks, favorite, marked, actions, onOpen, user }) {
   const toast = useToast();
+  const fail = (e) => toast(`Not saved: ${friendlyError(e)}`, 'err');
   const takeOff = ({ t, l }) => unmarkRedone(l, t, user)
     .then(() => toast({ title: 'Off the Re-done tab', description: `“${t.text}” stays in “${l.title}”` }))
-    .catch((e) => toast(`Not saved: ${friendlyError(e)}`, 'err'));
-  if (!list && !marked.length) {
+    .catch(fail);
+  const toggle = ({ t, l }) => updateTask(l, t, user, { done: !t.done }).catch(fail);
+  const all = [
+    ...(list ? (tasks || []).filter((t) => !t.archived).map((t) => ({ t, l: list, inRedone: true })) : []),
+    ...marked,
+  ];
+  if (!all.length && !list) {
     return (
       <div className="muted board-empty">
-        Nothing re-done yet. Say “re-done” in a task&apos;s feedback and it shows up here: an Unplaced task moves into
-        your Re-done list, a task in a list stays there and is listed below it.
+        Nothing re-done yet. Say “re-done” in a task&apos;s feedback and it shows up here, unticked, with a new round
+        for its next date: an Unplaced task moves into your Re-done list, a task in a list stays there.
       </div>
     );
   }
-  // the tasks placed in the Re-done list (from Unplaced): open ones first
-  const placed = (tasks || []).filter((t) => !t.archived).sort((a, b) => a.done - b.done);
-  const toggle = (t) => updateTask(list, t, user, { done: !t.done })
-    .catch((e) => toast(`Not saved: ${friendlyError(e)}`, 'err'));
+  const todo = all.filter((e) => !e.t.done);
+  const done = all.filter((e) => e.t.done);
+
+  const row = (e) => {
+    const { t, l } = e;
+    const n = roundsOf(t).length + 1;
+    const next = currentWhen(t);
+    return (
+      <li key={`${l.id}/${t.id}`} className={['redone-r', t.done && 'done', isRanged(next) && 'ranged'].filter(Boolean).join(' ')}>
+        <input type="checkbox" checked={t.done} disabled={!canWrite(l.role)} onChange={() => toggle(e)}
+          aria-label={`Mark “${t.text}” ${t.done ? 'not done' : 'done'}`} />
+        <div className="redone-b">
+          <span className="redone-t">{t.text}</span>
+          <span className="redone-m muted">
+            {n > 1 && <span className="redone-round">Round {n}</span>}
+            {next.due ? ` ${rangeLabel(next.due, next.until)}` : n > 1 && !t.done ? ' · set its next date in the task' : ''}
+            {' · '}
+            <button type="button" className="link" onClick={() => onOpen(l.id)}>{e.inRedone ? `in your “${l.title}” list` : `in “${l.title}”`}</button>
+          </span>
+        </div>
+        {!e.inRedone && canWrite(l.role) && (
+          <button type="button" className="btn small" onClick={() => takeOff(e)} title="Take it off this tab (it stays in its list)">
+            Take off
+          </button>
+        )}
+      </li>
+    );
+  };
+
   return (
     <div className="redone">
       {list && (
-        <section className="redone-sec" aria-labelledby="redone-list-h">
-          <div className="redone-sec-h">
-            <h2 id="redone-list-h" className="letters-h">
-              From Unplaced · in your “{list.title}” list <span className="count">{placed.length}</span>
-            </h2>
-            <button type="button" className="btn small" onClick={() => onOpen(list.id)}>Open list</button>
-            <ListMenu list={list} favorite={favorite} actions={actions} />
-          </div>
-          {tasks === null || tasks === undefined ? <Loading variant="inline" /> : placed.length === 0 ? (
-            <p className="muted redone-empty">No tasks in it right now.</p>
-          ) : (
-            <ul className="redone-rows">
-              {placed.map((t) => (
-                <li key={t.id} className={t.done ? 'redone-r done' : 'redone-r'}>
-                  <input type="checkbox" checked={t.done} disabled={!canWrite(list.role)} onChange={() => toggle(t)}
-                    aria-label={`Mark “${t.text}” ${t.done ? 'not done' : 'done'}`} />
-                  <div className="redone-b">
-                    <span className="redone-t">{t.text}</span>
-                    {t.due && <span className="muted redone-m">{rangeLabel(t.due, t.until)}</span>}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <div className="redone-sec-h">
+          <span className="muted">Moved from Unplaced into your “{list.title}” list</span>
+          <button type="button" className="btn small" onClick={() => onOpen(list.id)}>Open list</button>
+          <ListMenu list={list} favorite={favorite} actions={actions} />
+        </div>
       )}
-      {marked.length > 0 && (
-        <section className="redone-sec" aria-labelledby="redone-h">
-          <h2 id="redone-h" className="letters-h">Re-done in their lists <span className="count">{marked.length}</span></h2>
-          <ul className="redone-rows">
-            {marked.map(({ t, l }) => (
-              <li key={`${l.id}/${t.id}`} className={t.done ? 'redone-r done' : 'redone-r'}>
-                <span className="li-mark" style={{ background: colorFor(l.id) }} aria-hidden="true">{(l.title || '?').trim()[0]?.toUpperCase()}</span>
-                <div className="redone-b">
-                  <span className="redone-t">{t.text}</span>
-                  <button type="button" className="link" onClick={() => onOpen(l.id)}>in “{l.title}”</button>
-                </div>
-                {canWrite(l.role) && (
-                  <button type="button" className="btn small" onClick={() => takeOff({ t, l })} title="Take it off this tab (it stays in its list)">
-                    Take off
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
+      <section className="redone-sec" aria-labelledby="redone-todo-h">
+        <h2 id="redone-todo-h" className="letters-h">To do again <span className="count">{todo.length}</span></h2>
+        {tasks === undefined && list ? <Loading variant="inline" /> : todo.length ? <ul className="redone-rows">{todo.map(row)}</ul> : (
+          <p className="muted redone-empty">All done. Say “re-done” in a task&apos;s feedback to bring it back here.</p>
+        )}
+      </section>
+      {done.length > 0 && (
+        <section className="redone-sec" aria-labelledby="redone-done-h">
+          <h2 id="redone-done-h" className="letters-h">Done <span className="count">{done.length}</span></h2>
+          <ul className="redone-rows">{done.map(row)}</ul>
         </section>
       )}
     </div>

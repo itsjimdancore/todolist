@@ -2,10 +2,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { addTask, addTaskLink, createList, deleteTask, isUnplaced, removeTaskLink, updateTask, watchTasks } from '@/lib/data';
 import { stepsPatch } from '@/lib/steps';
+import { changeRound, roundView, roundsOf } from '@/lib/rounds';
 import {
   DEFAULT_MINS, addDays, dueLabel, fromKey, fromMin, hourLabel, isOverdue, longDay, monthDays,
   monthLabel, monthTitle, snap, time12, timeRange, toKey, toMin, todayKey, weekday,
-  daysOf, lastDay, rangeLabel,
+  daysOf, isRanged, lastDay, rangeLabel,
 } from '@/lib/dates';
 import { friendlyError } from '@/lib/firebase';
 import { useHolidayCountries, useHolidayCountry, useHolidays } from '@/lib/holidays';
@@ -123,7 +124,9 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
   const inDay = (a, b) => !!a.t.start - !!b.t.start || (a.t.start || '').localeCompare(b.t.start || '') || sorter(a, b);
   const byDay = new Map();
   // a task that runs over several days (due … until) shows on each of them
-  for (const e of entries) for (const d of daysOf(e.t)) byDay.set(d, [...(byDay.get(d) || []), e]);
+  // and each later round of a re-done task (lib/rounds.js) shows on its own days, as that round
+  const roundEntries = entries.flatMap((e) => roundsOf(e.t).map((_, i) => ({ t: roundView(e.t, i), l: e.l, real: e.t, key: `${e.l.id}/${e.t.id}/r${i}` })));
+  for (const e of [...entries, ...roundEntries]) for (const d of daysOf(e.t)) byDay.set(d, [...(byDay.get(d) || []), e]);
   for (const items of byDay.values()) items.sort(inDay);
   const undated = entries.filter((e) => !e.t.due && !e.t.done).sort(sorter);
   const canAdd = !!user; // a new task can always go into a new list of your own (or stay unplaced)
@@ -139,7 +142,8 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
   const run = (promise, okMsg) =>
     promise.then(() => okMsg && toast(okMsg)).catch((err) => toast(`Not saved: ${friendlyError(err)}`, 'err'));
   const when = (due, start, mins) => (due ? `${dueLabel(due).toLowerCase()}${start ? `, ${timeRange(start, mins)}` : ''}` : '');
-  const actions = {
+  const base = {
+    rounds: ({ t, l }, rounds) => run(updateTask(l, t, user, { rounds }, "task-due"), "Saved"),
     toggle: ({ t, l }) => run(updateTask(l, t, user, { done: !t.done })),
     // just the day (keeps the time); no day = no time either
     due: ({ t, l }, due) => t.due !== due &&
@@ -170,6 +174,18 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
     open: ({ t, l }) => { setPop(null); setTray(false); setQuick(null); setPanel({ listId: l.id, taskId: t.id }); },
     openList: (l) => onOpen(l.id),
   };
+  // a later round on the calendar: moving it (or giving it another day) changes that round; anything else is
+  // about the task itself
+  const roundAct = {
+    due: (e, due) => run(updateTask(e.l, e.real, user, { rounds: changeRound(e.real, e.t.round, { due }) }, "task-due"),
+      due ? `Round ${e.t.round + 2}: ${when(due, e.t.start, e.t.mins)}` : "Date removed"),
+    schedule: (e, due, start, mins) => run(updateTask(e.l, e.real, user, {
+      rounds: changeRound(e.real, e.t.round, { due, start: start || null, mins: start ? mins || DEFAULT_MINS : null }),
+    }, "task-due"), `Round ${e.t.round + 2} moved to ${when(due, start, mins)}`),
+  };
+  const actions = Object.fromEntries(Object.entries(base).map(([k, f]) => [k, (e, ...a) => (e?.real
+    ? (roundAct[k] ? roundAct[k](e, ...a) : f({ t: e.real, l: e.l }, ...a))
+    : f(e, ...a))]));
   const latest = useRef(actions);
   latest.current = actions;
 
@@ -393,7 +409,7 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
 
   const dayChips = (key, items, max = MAX_CHIPS) => (
     <>
-      {items.slice(0, max).map((e) => <Chip key={`${e.l.id}/${e.t.id}`} entry={e} today={today} {...dragProps(e)} />)}
+      {items.slice(0, max).map((e) => <Chip key={e.key || `${e.l.id}/${e.t.id}`} entry={e} today={today} {...dragProps(e)} />)}
       {items.length > max && (
         <button type="button" className="cal-more"
           onClick={(ev) => { ev.stopPropagation(); setPop({ day: key, rect: ev.currentTarget.closest('[data-day]').getBoundingClientRect() }); }}>
@@ -584,7 +600,7 @@ function DayAgenda({ day, today, items, holiday, loading, actions, canAdd, onOpe
       {holiday && <p className="cal-hol-line">🎉 Public holiday: {holiday.name}</p>}
       {items.length ? (
         <ul className="cal-rows">
-          {items.map((e) => <TaskRow key={`${e.l.id}/${e.t.id}`} entry={e} actions={actions} />)}
+          {items.map((e) => <TaskRow key={e.key || `${e.l.id}/${e.t.id}`} entry={e} actions={actions} />)}
         </ul>
       ) : loading ? (
         <Loading hint="Getting your tasks" />
@@ -615,7 +631,7 @@ function Chip({ entry, today, ...props }) {
   const late = !t.done && lastDay(t) < today;
   const by = shownName(t.createdByName, t.createdBy) || 'Someone';
   return (
-    <button type="button" className={['chip', t.done && 'done', late && 'late', canWrite(l.role) && 'can-drag'].filter(Boolean).join(' ')}
+    <button type="button" className={['chip', t.done && 'done', isRanged(t) && 'ranged', late && 'late', canWrite(l.role) && 'can-drag'].filter(Boolean).join(' ')}
       title={`${t.start ? `${timeRange(t.start, t.mins)} · ` : ''}${t.text} · ${l.title}${late ? ' · overdue' : ''}`} {...props}>
       {t.done ? (
         <svg className="chip-ok" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-label="Done"><path d="M20 6 9 17l-5-5" /></svg>
@@ -623,6 +639,7 @@ function Chip({ entry, today, ...props }) {
         <i className="chip-bar" style={{ background: colorFor(l.id) }} aria-hidden="true" />
       )}
       {t.start && <span className="chip-time">{time12(t.start)}</span>}
+      {t.round != null && <span className="chip-round" title={`Round ${t.round + 2}`}>R{t.round + 2}</span>}
       <span className="chip-t">{t.text}</span>
       <span className="chip-av" style={{ background: colorFor(by) }} title={`Added by ${by}`}>{badgeOf(by, t.createdBy)}</span>
     </button>
@@ -721,8 +738,8 @@ function WeekView({ days, today, byDay, holidays, preview, dropDay, quick, grid,
               {layoutDay(timed).map(({ e, s, lane, lanes }) => {
                 const isMoving = moving && moving.t.id === e.t.id && moving.l.id === e.l.id;
                 return (
-                  <button key={`${e.l.id}/${e.t.id}`} type="button"
-                    className={['wk-block', e.t.done && 'done', isOverdue(e.t) && 'late', isMoving && 'moving', canWrite(e.l.role) && 'can-drag'].filter(Boolean).join(' ')}
+                  <button key={e.key || `${e.l.id}/${e.t.id}`} type="button"
+                    className={['wk-block', e.t.done && 'done', isRanged(e.t) && 'ranged', isOverdue(e.t) && 'late', isMoving && 'moving', canWrite(e.l.role) && 'can-drag'].filter(Boolean).join(' ')}
                     style={{ ...blockStyle(s, e.t.mins || DEFAULT_MINS, lane, lanes), '--c': colorFor(e.l.id) }}
                     title={`${timeRange(e.t.start, e.t.mins)} · ${e.t.text} · ${e.l.title}`} {...dragProps(e)}>
                     <span className="wk-block-t">{e.t.text}</span>
@@ -1034,7 +1051,7 @@ function DayPopover({ day, rect, items, actions, onAdd, onClose }) {
         <button className="ic" type="button" onClick={onClose} aria-label="Close">✕</button>
       </div>
       {items.length ? (
-        <ul className="cal-rows">{items.map((e) => <TaskRow key={`${e.l.id}/${e.t.id}`} entry={e} actions={actions} picker={false} />)}</ul>
+        <ul className="cal-rows">{items.map((e) => <TaskRow key={e.key || `${e.l.id}/${e.t.id}`} entry={e} actions={actions} picker={false} />)}</ul>
       ) : (
         <p className="cal-empty">Nothing due on this day.</p>
       )}
@@ -1075,6 +1092,7 @@ function TaskPanel({ entry, actions, onClose }) {
     steps: (steps) => actions.steps(entry, steps),
     due: (due) => actions.due(entry, due),
     until: (until) => actions.until(entry, until),
+    rounds: (rounds) => actions.rounds(entry, rounds),
     month: (month) => actions.month(entry, month),
     rating: (rating) => actions.rating(entry, rating),
     schedule: (due, start, mins) => actions.schedule(entry, due, start, mins),

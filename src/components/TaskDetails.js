@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_MINS, addDays, dueLabel, fromMin, isOverdue, timeRange, toMin, todayKey } from '@/lib/dates';
 import { colorFor, shownName } from '@/lib/people';
+import { changeRound, removeRound, roundView, roundsOf } from '@/lib/rounds';
 import DuePicker from './DuePicker';
 import Select from './Select';
 import TaskLinks, { LinkIcon } from './TaskLinks';
@@ -30,6 +31,7 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
       {/* links added before steps had their own: still shown (and removable), but no longer added here */}
       <TaskLinks links={t.links} canEdit={canEdit} onRemove={on.removeLink} />
       <dl className="cal-panel-d">
+        {roundsOf(t).length > 0 && <dt className="round-h">Round 1</dt>}
         <dt>Date</dt>
         {/* on a day (then a time below), or sometime during a month (no time; its steps can have their own dates) */}
         <dd><DuePicker value={t.due || null} month={t.month || null} task={t} canEdit={canEdit} onChange={on.due} onMonth={on.month} /></dd>
@@ -54,6 +56,10 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
             </dd>
           </>
         )}
+        {/* each time it was re-done: another slot with the same date, end date and time */}
+        {on.rounds && roundsOf(t).map((r, i) => (
+          <RoundFields key={i} task={t} i={i} canEdit={canEdit} onSave={on.rounds} />
+        ))}
         <dt>Status</dt>
         <dd>{t.archived ? 'Archived' : t.done ? 'Done' : isOverdue(t) ? <span className="late-txt">Overdue</span> : 'Open'}</dd>
         <dt>Added by</dt>
@@ -62,6 +68,45 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
       {!write && <p className="cal-hint">You can view this task but not change it.</p>}
       {write && <TaskActions archived={!!t.archived} onArchive={on.archive} onDelete={on.remove} />}
       {footer}
+    </>
+  );
+}
+
+// One later round (re-done): its own Date, Until and Time, saved into the task's `rounds`
+function RoundFields({ task: t, i, canEdit, onSave }) {
+  const r = roundView(t, i);
+  const set = (patch) => onSave(changeRound(t, i, patch));
+  return (
+    <>
+      <dt className="round-h">
+        Round {i + 2}
+        {canEdit && (
+          <button type="button" className="link danger round-x" onClick={() => onSave(removeRound(t, i))}
+            aria-label={`Remove round ${i + 2}`}>Remove</button>
+        )}
+      </dt>
+      <dt>Date</dt>
+      <dd><DuePicker value={r.due} task={r} canEdit={canEdit} onChange={(due) => set({ due })} label="Next date" /></dd>
+      {r.due && (canEdit || r.until) && (
+        <>
+          <dt>Until</dt>
+          <dd>
+            <DuePicker value={r.until} min={addDays(r.due, 1)} canEdit={canEdit} onChange={(until) => set({ until })}
+              label="End date (optional)" />
+          </dd>
+        </>
+      )}
+      {r.due && (
+        <>
+          <dt>Time</dt>
+          <dd>
+            {canEdit ? (
+              <TimeFields start={r.start} mins={r.mins || DEFAULT_MINS} idPrefix={`td-${t.id}-r${i}`}
+                onChange={({ start, mins }) => set({ start, mins: start ? mins : null })} />
+            ) : r.start ? timeRange(r.start, r.mins) : 'All day'}
+          </dd>
+        </>
+      )}
     </>
   );
 }

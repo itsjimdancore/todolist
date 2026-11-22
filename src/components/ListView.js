@@ -190,6 +190,7 @@ export default function ListView({ list, role, user, contacts, back, lists = [],
       until: (until) => (t.until || null) !== until &&
         run(updateTask(list, t, user, { until: until || null }, 'task-due', until || t.due), until ? `Runs ${rangeLabel(t.due, until).toLowerCase()}` : 'Just the one day now'),
       month: p.onMonth,
+      rounds: (rounds) => run(updateTask(list, t, user, { rounds }, 'task-due'), 'Saved'),
       rating: (rating) => run(updateTask(list, t, user, { rating }), rating ? `Rated ${rating}/10` : 'Rating removed'),
       schedule: (due, start, mins) => {
         const patch = { due, start: start || null, mins: start ? mins : null };
