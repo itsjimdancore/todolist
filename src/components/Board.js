@@ -5,6 +5,7 @@ import { canWrite, roleLabel } from '@/lib/permissions';
 import { Avatar, colorFor, shownName, timeAgo } from '@/lib/people';
 import ListMenu from './ListMenu';
 import Loading from './Loading';
+import { RoundTree } from './TaskDetails';
 import { redoneListOf, unmarkRedone, updateTask } from '@/lib/data';
 import { isRanged, rangeLabel } from '@/lib/dates';
 import { currentWhen, roundsOf } from '@/lib/rounds';
@@ -253,6 +254,7 @@ function RedoneTab({ list, tasks, favorite, marked, actions, onOpen, user }) {
             {' · '}
             <button type="button" className="link" onClick={() => onOpen(l.id)}>{e.inRedone ? `in your “${l.title}” list` : `in “${l.title}”`}</button>
           </span>
+          {n > 1 && <RoundTree task={t} compact />}
         </div>
         {!e.inRedone && canWrite(l.role) && (
           <button type="button" className="btn small" onClick={() => takeOff(e)} title="Take it off this tab (it stays in its list)">

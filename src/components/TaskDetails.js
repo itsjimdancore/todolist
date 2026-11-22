@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { DEFAULT_MINS, addDays, dueLabel, fromMin, isOverdue, timeRange, toMin, todayKey } from '@/lib/dates';
+import { DEFAULT_MINS, addDays, dueLabel, monthLabel, rangeLabel, fromMin, isOverdue, timeRange, toMin, todayKey } from '@/lib/dates';
 import { colorFor, shownName } from '@/lib/people';
 import { changeRound, removeRound, roundView, roundsOf } from '@/lib/rounds';
 import DuePicker from './DuePicker';
@@ -60,6 +60,13 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
         {on.rounds && roundsOf(t).map((r, i) => (
           <RoundFields key={i} task={t} i={i} canEdit={canEdit} onSave={on.rounds} />
         ))}
+        {/* every round so far, as a small tree: when and at what time each one happens */}
+        {roundsOf(t).length > 0 && (
+          <>
+            <dt className="round-h">Schedule</dt>
+            <dd className="round-tree-dd"><RoundTree task={t} /></dd>
+          </>
+        )}
         <dt>Status</dt>
         <dd>{t.archived ? 'Archived' : t.done ? 'Done' : isOverdue(t) ? <span className="late-txt">Overdue</span> : 'Open'}</dd>
         <dt>Added by</dt>
@@ -69,6 +76,32 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
       {write && <TaskActions archived={!!t.archived} onArchive={on.archive} onDelete={on.remove} />}
       {footer}
     </>
+  );
+}
+
+// A task's rounds as a small tree, one branch per round: when it happens (a day, or from … until) and at what
+// time (or all day). The last one is where it's at now; the ones before it were the earlier schedules.
+// compact: a smaller version (the Re-done tab)
+export function RoundTree({ task: t, compact = false }) {
+  const all = [t, ...roundsOf(t).map((_, i) => roundView(t, i))];
+  return (
+    <ol className={compact ? 'round-tree compact' : 'round-tree'} aria-label="Schedule, round by round">
+      {all.map((r, i) => {
+        const last = i === all.length - 1;
+        const state = last ? (t.done ? 'done' : 'now') : 'past';
+        return (
+          <li key={i} className={`rt-${state}`}>
+            <span className="rt-dot" aria-hidden="true" />
+            <span className="rt-n">Round {i + 1}</span>
+            <span className="rt-when">
+              {r.due ? rangeLabel(r.due, r.until) : r.month ? monthLabel(r.month) : <em>No date yet</em>}
+              {r.due && <span className="rt-time">{r.start ? timeRange(r.start, r.mins) : 'All day'}</span>}
+            </span>
+            {last && <span className="rt-tag">{t.done ? 'Done' : 'Now'}</span>}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
