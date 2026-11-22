@@ -3144,3 +3144,65 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 .rt-done .rt-tag { background: color-mix(in srgb, var(--ranged-done) 18%, transparent); color: var(--ranged-done); }
 .round-tree.compact { margin-top: 6px; }
 .round-tree.compact li { padding-bottom: 4px; font-size: 12px; }
+
+/* Calendar: the days a task with an Until runs over are outlined orange; green once it's ticked */
+.cal-day.in-range, .wk-cell.in-range, .mm-d.in-range { box-shadow: inset 0 0 0 2px var(--ranged); background-color: color-mix(in srgb, var(--ranged) 7%, transparent); }
+.cal-day.range-done, .wk-cell.range-done, .mm-d.range-done { box-shadow: inset 0 0 0 2px var(--ranged-done); background-color: color-mix(in srgb, var(--ranged-done) 7%, transparent); }
+.mm-d.in-range { border-radius: 6px; }
+
+/* ---------- Small screens: feedback, Re-done, rounds and search ---------- */
+.fb-who b { overflow-wrap: anywhere; min-width: 0; }
+.fb-reply { flex-wrap: wrap; }
+@media (max-width: 640px) {
+  /* feedback: full width under the task, 16px fields (stops iPhones zooming in), bigger taps */
+  .t-fb, .t-fb.up-fb { flex-basis: 100%; width: 100%; padding: 6px 0 4px; }
+  .fb { padding: 10px; gap: 12px; border-radius: 12px; }
+  .fb-h { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .fb-avg { white-space: normal; }
+  .fb-rate { white-space: normal; }
+  .fb-replies { margin-left: 10px; padding-left: 8px; }
+  .fb-acts { gap: 4px; }
+  .fb-acts .link { min-height: 32px; padding: 0 8px; margin-left: -8px; display: inline-flex; align-items: center; font-size: 13px; }
+  .fb-reply input { height: 42px; font-size: 16px; flex: 1 1 100%; }
+  .fb-reply .btn { flex: 1; height: 40px; }
+  .fb-new textarea { font-size: 16px; min-height: 72px; }
+  .fb-new-f .btn { width: 100%; height: 42px; font-size: 15px; }
+  .t-fb-btn { padding: 6px 12px; font-size: 13px; }
+
+  /* the search boxes inside a list and on Love letters take the full width */
+  .lv-search { padding: 10px 12px 0; }
+  .letters-tools .cal-search { max-width: none; }
+
+  /* Re-done tab: the row's text gets the width; Take off drops under it */
+  .redone-r { flex-wrap: wrap; padding: 10px 12px; }
+  .redone-b { flex: 1 1 calc(100% - 40px); }
+  .redone-r > .btn { margin-left: 34px; }
+  .redone-sec-h { flex-wrap: wrap; }
+  .redone-sec-h > .muted { flex: 1 1 100%; }
+
+  /* rounds: the schedule tree's dates and times wrap under the round's name */
+  .round-tree li { gap: 0 8px; }
+  .rt-n { min-width: 0; }
+  .rt-when { flex: 1 1 100%; }
+
+  /* tasks with an end date keep their border inside the screen */
+  .task.ranged, .up-r.ranged { margin: 4px 0; }
+}
+@media (max-width: 380px) {
+  .fb { padding: 8px; }
+  .fb-e { gap: 6px; }
+  .fb-replies { margin-left: 4px; }
+  .fb-who { font-size: 12.5px; gap: 2px 6px; }
+}
+/* phones lay a task out as a grid ([✓] [text] [⋯]); its feedback takes the whole width under it, not the ✓ column */
+.task > .t-fb { grid-column: 1 / -1; min-width: 0; }
+.redone-next { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; font-size: 12.5px; }
+.redone-r { align-items: flex-start; }
+.redone-r > input[type=checkbox] { margin-top: 3px; flex: none; }
+.redone-b .link { text-align: left; }
+@media (max-width: 640px) {
+  /* My List's tabs wrap onto a second line instead of hiding Re-done behind a scrollbar */
+  .board-tabs { flex-wrap: wrap; overflow: visible; align-self: stretch; }
+  .board-tabs .tab { flex: 1 1 auto; padding: 7px 8px; }
+  .redone-r > input[type=checkbox] { width: 20px; height: 20px; margin-top: 1px; }
+}

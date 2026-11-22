@@ -22,7 +22,7 @@ import {
 } from 'firebase/firestore';
 import { fb } from './firebase';
 import { addDays, daysBetween } from './dates';
-import { addRound } from './rounds';
+import { addRound, roundsOf } from './rounds';
 
 const db = () => fb().db;
 const listRef = (id) => doc(db(), 'lists', id);
@@ -606,9 +606,17 @@ function keepRange(task, patch) {
   return { ...patch, until: addDays(patch.due, Math.max(1, daysBetween(task.due, task.until))) };
 }
 
+// A ticked task whose newest round (after "re-done") just got its first date: it's on again, so it's unticked
+// (and moves from Done to To do again on My List's Re-done tab)
+function reopenOnNewDate(task, patch) {
+  if (!task.done || 'done' in patch || !Array.isArray(patch.rounds) || !patch.rounds.length) return patch;
+  const i = patch.rounds.length - 1;
+  return patch.rounds[i]?.due && !roundsOf(task)[i]?.due ? { ...patch, done: false } : patch;
+}
+
 // task: the task as it is now (its text goes in the notification). kind: say what this was, if the patch doesn't.
 export function updateTask(list, task, user, rawPatch, kind = taskKind(task, rawPatch), detail = '') {
-  const patch = keepRange(task, rawPatch);
+  const patch = reopenOnNewDate(task, keepRange(task, rawPatch));
   const b = writeBatch(db());
   b.update(doc(tasksCol(list.id), task.id), { ...patch, ...stamp(user) });
   b.update(listRef(list.id), { updatedAt: serverTimestamp() });
@@ -713,11 +721,12 @@ export const saysRedone = (text) => /\bre[\s-]?done\b/i.test(text || '');
 export const redoneListOf = (lists, uid) =>
   (lists || []).find((l) => l.ownerId === uid && l.kind !== 'letter' && !l.archived && l.title?.trim().toLowerCase() === REDONE_TITLE.toLowerCase()) || null;
 
-// Each time, it's unticked (to do again, until it's ticked, when it shows as Done on the Re-done tab) and gets
-// another round: an empty slot for its next date and time (lib/rounds.js).
+// Each time, it gets another round: an empty slot for its next date and time (lib/rounds.js). It stays as it was
+// (a ticked one stays under Done on the Re-done tab) until that round is given a date: then it's unticked and
+// moves to To do again (see reopenOnNewDate).
 // resolves to what happened: { moved: list, round } or { marked: true, round } (round: its number, 2, 3 …)
 export async function fileRedone(list, task, user, lists) {
-  const again = { done: false, redone: true, rounds: addRound(task) };
+  const again = { redone: true, rounds: addRound(task) };
   const round = again.rounds.length + 1;
   if (isUnplaced(list)) {
     let to = redoneListOf(lists, user.uid);
@@ -728,7 +737,7 @@ export async function fileRedone(list, task, user, lists) {
     await moveTask(list, task, to, user, again);
     return { moved: to, round };
   }
-  await updateTask(list, task, user, again, 'task-undone');
+  await updateTask(list, task, user, again, null);
   return { marked: true, round };
 }
 // take a task off the Re-done tab (it stays in its list)

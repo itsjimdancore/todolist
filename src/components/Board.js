@@ -8,7 +8,8 @@ import Loading from './Loading';
 import { RoundTree } from './TaskDetails';
 import { redoneListOf, unmarkRedone, updateTask } from '@/lib/data';
 import { isRanged, rangeLabel } from '@/lib/dates';
-import { currentWhen, roundsOf } from '@/lib/rounds';
+import { changeRound, currentWhen, roundsOf } from '@/lib/rounds';
+import DuePicker from './DuePicker';
 import { friendlyError } from '@/lib/firebase';
 import { useToast } from './Toast';
 
@@ -223,6 +224,10 @@ function RedoneTab({ list, tasks, favorite, marked, actions, onOpen, user }) {
     .then(() => toast({ title: 'Off the Re-done tab', description: `“${t.text}” stays in “${l.title}”` }))
     .catch(fail);
   const toggle = ({ t, l }) => updateTask(l, t, user, { done: !t.done }).catch(fail);
+  // the newest round's date, set right here: a ticked task then moves to To do again (lib/data.js reopenOnNewDate)
+  const setNext = ({ t, l }, i, due) => updateTask(l, t, user, { rounds: changeRound(t, i, { due }) }, 'task-due')
+    .then(() => due && toast({ title: `Round ${i + 2} set`, description: `“${t.text}”: ${rangeLabel(due)}${t.done ? ', back in To do again' : ''}` }))
+    .catch(fail);
   const all = [
     ...(list ? (tasks || []).filter((t) => !t.archived).map((t) => ({ t, l: list, inRedone: true })) : []),
     ...marked,
@@ -242,6 +247,8 @@ function RedoneTab({ list, tasks, favorite, marked, actions, onOpen, user }) {
     const { t, l } = e;
     const n = roundsOf(t).length + 1;
     const next = currentWhen(t);
+    const rs = roundsOf(t);
+    const waiting = rs.length > 0 && !rs[rs.length - 1].due; // re-done, its new round has no date yet
     return (
       <li key={`${l.id}/${t.id}`} className={['redone-r', t.done && 'done', isRanged(next) && 'ranged'].filter(Boolean).join(' ')}>
         <input type="checkbox" checked={t.done} disabled={!canWrite(l.role)} onChange={() => toggle(e)}
@@ -250,11 +257,18 @@ function RedoneTab({ list, tasks, favorite, marked, actions, onOpen, user }) {
           <span className="redone-t">{t.text}</span>
           <span className="redone-m muted">
             {n > 1 && <span className="redone-round">Round {n}</span>}
-            {next.due ? ` ${rangeLabel(next.due, next.until)}` : n > 1 && !t.done ? ' · set its next date in the task' : ''}
+            {/* the newest round: its date, or none yet (the tree below has the earlier ones) */}
+            {waiting ? ' no date yet' : next.due ? ` ${rangeLabel(next.due, next.until)}` : ''}
             {' · '}
             <button type="button" className="link" onClick={() => onOpen(l.id)}>{e.inRedone ? `in your “${l.title}” list` : `in “${l.title}”`}</button>
           </span>
           {n > 1 && <RoundTree task={t} compact />}
+          {waiting && canWrite(l.role) && (
+            <div className="redone-next">
+              <DuePicker value={null} onChange={(due) => due && setNext(e, rs.length - 1, due)} label={`Set round ${n} date`} />
+              {t.done && <span className="muted">Stays in Done until it has a date</span>}
+            </div>
+          )}
         </div>
         {!e.inRedone && canWrite(l.role) && (
           <button type="button" className="btn small" onClick={() => takeOff(e)} title="Take it off this tab (it stays in its list)">
@@ -277,7 +291,7 @@ function RedoneTab({ list, tasks, favorite, marked, actions, onOpen, user }) {
       <section className="redone-sec" aria-labelledby="redone-todo-h">
         <h2 id="redone-todo-h" className="letters-h">To do again <span className="count">{todo.length}</span></h2>
         {tasks === undefined && list ? <Loading variant="inline" /> : todo.length ? <ul className="redone-rows">{todo.map(row)}</ul> : (
-          <p className="muted redone-empty">All done. Say “re-done” in a task&apos;s feedback to bring it back here.</p>
+          <p className="muted redone-empty">Nothing to do again. Say “re-done” in a task&apos;s feedback, then give its new round a date, to bring it here.</p>
         )}
       </section>
       {done.length > 0 && (
