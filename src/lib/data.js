@@ -21,6 +21,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { fb } from './firebase';
+import { addDays, daysBetween } from './dates';
 
 const db = () => fb().db;
 const listRef = (id) => doc(db(), 'lists', id);
@@ -594,8 +595,19 @@ function taskKind(task, patch) {
   return null;
 }
 
+// A task that runs over several days (due … until): moving its first day moves the whole run, the same number of
+// days long; taking its day away (or setting it to a month instead) ends the run too
+function keepRange(task, patch) {
+  if (!task.until || 'until' in patch) return patch;
+  if (patch.month) return { ...patch, until: null };
+  if (!('due' in patch) || patch.due === task.due) return patch;
+  if (!patch.due || !task.due) return { ...patch, until: null };
+  return { ...patch, until: addDays(patch.due, Math.max(1, daysBetween(task.due, task.until))) };
+}
+
 // task: the task as it is now (its text goes in the notification). kind: say what this was, if the patch doesn't.
-export function updateTask(list, task, user, patch, kind = taskKind(task, patch), detail = '') {
+export function updateTask(list, task, user, rawPatch, kind = taskKind(task, rawPatch), detail = '') {
+  const patch = keepRange(task, rawPatch);
   const b = writeBatch(db());
   b.update(doc(tasksCol(list.id), task.id), { ...patch, ...stamp(user) });
   b.update(listRef(list.id), { updatedAt: serverTimestamp() });
@@ -690,6 +702,33 @@ export async function ungroupToUnplaced(list, task, user, exists) {
   await moveTask(list, task, to, user);
   return to;
 }
+
+// ---- "Re-done": feedback that says a task was re-done (the words "re-done" / "redone" / "re done") files it.
+// An Unplaced task moves into my "Re-done" list (made the first time). A task already in a list stays where it is,
+// marked `redone`, and shows on My List's Re-done tab, until it's taken off there.
+export const REDONE_TITLE = 'Re-done';
+export const saysRedone = (text) => /\bre[\s-]?done\b/i.test(text || '');
+// my own Re-done list, among the lists I have
+export const redoneListOf = (lists, uid) =>
+  (lists || []).find((l) => l.ownerId === uid && l.kind !== 'letter' && !l.archived && l.title?.trim().toLowerCase() === REDONE_TITLE.toLowerCase()) || null;
+
+// resolves to what happened: { moved: list } or { marked: true } (nothing if it was already there)
+export async function fileRedone(list, task, user, lists) {
+  if (isUnplaced(list)) {
+    let to = redoneListOf(lists, user.uid);
+    if (!to) {
+      const id = await createList(user, REDONE_TITLE);
+      to = { id, title: REDONE_TITLE, ownerId: user.uid, ownerEmail: emailOf(user), roles: {} };
+    }
+    await moveTask(list, task, to, user);
+    return { moved: to };
+  }
+  if (task.redone) return {};
+  await updateTask(list, task, user, { redone: true }, null);
+  return { marked: true };
+}
+// take a task off the Re-done tab (it stays in its list)
+export const unmarkRedone = (list, task, user) => updateTask(list, task, user, { redone: deleteField() }, null);
 
 // its feedback goes too
 export async function deleteTask(list, task, user) {

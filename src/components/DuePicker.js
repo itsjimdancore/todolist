@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { dueLabel, fromKey, isOverdue, monthDays, monthKeyOf, monthLabel, monthTitle, quickDates, thisMonthKey, toKey, todayKey } from '@/lib/dates';
+import { dueLabel, rangeLabel, fromKey, isOverdue, monthDays, monthKeyOf, monthLabel, monthTitle, quickDates, thisMonthKey, toKey, todayKey } from '@/lib/dates';
 
 const HEADS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -18,7 +18,7 @@ export function CalIcon({ size = 14 }) {
 // onMonth the picker has two choices at the top, On a day and During a month.
 // label: what the empty button says (a step's date is "Due date" too, but could say something else)
 export default function DuePicker({ value, onChange, task, canEdit = true, compact = false, time = null,
-  month = null, onMonth = null, label: what = 'Due date' }) {
+  month = null, onMonth = null, label: what = 'Due date', until = null, min = null }) {
   const [open, setOpen] = useState(null); // where the picker sits on screen while open
   const box = useRef(null);
   const btn = useRef(null);
@@ -64,7 +64,7 @@ export default function DuePicker({ value, onChange, task, canEdit = true, compa
   const cls = ['due', set ? 'set' : 'empty', overdue && 'late', task?.done && 'done', compact && !set && 'icon-only']
     .filter(Boolean).join(' ');
   const late = overdue ? 'Overdue · ' : '';
-  const label = value ? `${late}${dueLabel(value)}${time ? ` · ${time}` : ''}`
+  const label = value ? `${late}${rangeLabel(value, until)}${time ? ` · ${time}` : ''}`
     : month ? `${late}${monthLabel(month).includes('month') ? monthLabel(month) : `During ${monthLabel(month)}`}`
     : compact ? '' : what;
 
@@ -79,14 +79,14 @@ export default function DuePicker({ value, onChange, task, canEdit = true, compa
         aria-label={set ? `${label}. Change the date` : `Add a ${what.toLowerCase()}`} title={set ? 'Change the date' : `Add a ${what.toLowerCase()}`}>
         <CalIcon size={set || compact ? 13 : 12} />{label}
       </button>
-      {open && <Popover value={value} onPick={pick} at={open} month={month} onMonth={onMonth ? pickMonth : null} />}
+      {open && <Popover value={value} onPick={pick} at={open} month={month} onMonth={onMonth ? pickMonth : null} min={min} />}
     </div>
   );
 }
 
-function Popover({ value, onPick, at, month, onMonth }) {
+function Popover({ value, onPick, at, month, onMonth, min }) {
   const [mode, setMode] = useState(month && !value ? 'month' : 'day');
-  const start = value ? fromKey(value) : month ? fromKey(`${month}-01`) : new Date();
+  const start = value ? fromKey(value) : min ? fromKey(min) : month ? fromKey(`${month}-01`) : new Date();
   const [ym, setYm] = useState([start.getFullYear(), start.getMonth()]);
   const [y, m] = ym;
   const today = todayKey();
@@ -105,7 +105,7 @@ function Popover({ value, onPick, at, month, onMonth }) {
         </div>
       )}
       {mode === 'month' ? <MonthGrid year={y} value={month} onPick={onMonth} shiftYear={(n) => shift(12 * n)} /> : (<>
-      {quickDates().map((q) => (
+      {quickDates().filter((q) => !min || q.key >= min).map((q) => (
         <button key={q.label} type="button" className={value === q.key ? 'due-q on' : 'due-q'} onClick={() => onPick(q.key)}>
           {q.label}<small>{fromKey(q.key).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</small>
         </button>
@@ -122,7 +122,7 @@ function Popover({ value, onPick, at, month, onMonth }) {
           const k = toKey(d);
           const cls = ['due-d', d.getMonth() !== m && 'out', k === today && 'today', k === value && 'on'].filter(Boolean).join(' ');
           return (
-            <button key={k} type="button" className={cls} onClick={() => onPick(k)} aria-label={d.toDateString()}
+            <button key={k} type="button" className={cls} onClick={() => onPick(k)} aria-label={d.toDateString()} disabled={!!min && k < min}
               aria-pressed={k === value}>
               {d.getDate()}
             </button>

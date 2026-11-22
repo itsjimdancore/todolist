@@ -686,7 +686,7 @@ function WorkspaceInner({ user }) {
             onNew={() => setCreating('letter')} />
         ) : view === 'board' ? (
           <Board lists={arranged} tasksByList={allTasks} favorites={favorites} actions={actions} onOpen={pick} onNew={() => setCreating('list')}
-            onReorder={onReorder}
+            onReorder={onReorder} user={user}
             top={<Unplaced list={unplaced} tasks={unplaced && allTasks[unplaced.id]} lists={openLists} user={user} />} />
         ) : active?.kind === 'letter' ? (
           <LetterView key={active.id} list={active} role={active.role} user={user} contacts={contacts} back={back}

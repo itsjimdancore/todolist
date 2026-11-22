@@ -495,6 +495,27 @@ button.music-next:hover b { color: var(--accent); }
 .count { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* Tasks heading + "Add a task" stay at the top of the scrolling page while the tasks move under them */
 .lv-tasks-top { position: sticky; top: 0; z-index: 5; background: var(--surface); border-radius: var(--r) var(--r) 0 0; }
+/* search inside a list: under the Tasks heading, above "Add a task" */
+.lv-search { padding: 10px 16px 0; }
+.lv-search .cal-search { max-width: none; }
+/* a day before a task's start can't be its end */
+.due-d:disabled { opacity: .3; cursor: default; pointer-events: none; }
+/* My List's Re-done tab */
+.redone { display: flex; flex-direction: column; gap: 22px; }
+.redone-sec { display: flex; flex-direction: column; gap: 10px; }
+.redone-rows { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.redone-r { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+.redone-r + .redone-r { border-top: 1px solid var(--line); }
+.redone-r .li-mark { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; color: #fff; font-size: 12px; font-weight: 700; }
+.redone-b { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.redone-t { overflow-wrap: anywhere; }
+.redone-r.done .redone-t { text-decoration: line-through; color: var(--muted); }
+.redone-b .link, .redone-m { font-size: 12.5px; }
+.redone-sec-h { display: flex; align-items: center; gap: 10px; }
+.redone-sec-h .letters-h { flex: 1; min-width: 0; }
+.redone-empty { margin: 0; }
+.letters-tools { display: flex; }
+.letters-tools .cal-search { flex: 1 1 280px; max-width: 460px; height: 40px; }
 .add-form { border-bottom: 1px solid var(--line); }
 .add { display: flex; gap: 8px; padding: 12px 16px; }
 /* the optional extras slide open under "Add a task" once something's typed */

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { DEFAULT_MINS, dueLabel, fromMin, isOverdue, timeRange, toMin, todayKey } from '@/lib/dates';
+import { DEFAULT_MINS, addDays, dueLabel, fromMin, isOverdue, timeRange, toMin, todayKey } from '@/lib/dates';
 import { colorFor, shownName } from '@/lib/people';
 import DuePicker from './DuePicker';
 import Select from './Select';
@@ -33,6 +33,16 @@ export default function TaskDetails({ task: t, list: l, write, on, onClose, foot
         <dt>Date</dt>
         {/* on a day (then a time below), or sometime during a month (no time; its steps can have their own dates) */}
         <dd><DuePicker value={t.due || null} month={t.month || null} task={t} canEdit={canEdit} onChange={on.due} onMonth={on.month} /></dd>
+        {/* runs over several days: from the date above to this one (like a time's from and to) */}
+        {t.due && on.until && (canEdit || t.until) && (
+          <>
+            <dt>Until</dt>
+            <dd>
+              <DuePicker value={t.until && t.until > t.due ? t.until : null} min={addDays(t.due, 1)} canEdit={canEdit}
+                onChange={on.until} label="End date (optional)" />
+            </dd>
+          </>
+        )}
         {t.due && (
           <>
             <dt>Time</dt>

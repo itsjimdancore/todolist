@@ -45,8 +45,24 @@ export function dueLabel(key) {
   return d.toLocaleDateString('en-GB', opts);
 }
 
-// past its day, or (a month task) past its month
-export const isOverdue = (task) => !task.done && (task.due ? task.due < todayKey() : !!task.month && task.month < thisMonthKey());
+// Whole days from one 'YYYY-MM-DD' to another (negative if b is before a)
+export const daysBetween = (a, b) => Math.round((fromKey(b) - fromKey(a)) / 86400000);
+
+// ---- a task can run over several days: from `due` to `until` ('YYYY-MM-DD', after due)
+// its last day
+export const lastDay = (task) => (task.until && task.until > (task.due || '') ? task.until : task.due) || null;
+// every day it's on, due … until (at most a year of them)
+export function daysOf(task) {
+  if (!task.due) return [];
+  if (!task.until || task.until <= task.due) return [task.due];
+  const n = Math.min(daysBetween(task.due, task.until), 366);
+  return Array.from({ length: n + 1 }, (_, i) => addDays(task.due, i));
+}
+// 'Mon 3 Nov – Fri 7 Nov' (or just the one day)
+export const rangeLabel = (due, until) => (until && until > due ? `${dueLabel(due)} – ${dueLabel(until)}` : dueLabel(due));
+
+// past its (last) day, or (a month task) past its month
+export const isOverdue = (task) => !task.done && (task.due ? lastDay(task) < todayKey() : !!task.month && task.month < thisMonthKey());
 
 // How a list orders its tasks, so setting a date moves the task into place by itself:
 // open tasks with a date (or a month, after that month's days) first, soonest first (so overdue ones are on top); on the same day, all-day ones and

@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { MAX_FEEDBACK, addFeedback, deleteFeedback, watchFeedback } from '@/lib/data';
+import { MAX_FEEDBACK, addFeedback, deleteFeedback, fileRedone, saysRedone, watchFeedback } from '@/lib/data';
 import { friendlyError } from '@/lib/firebase';
 import { Avatar, shownName, timeAgo } from '@/lib/people';
 import { ratingWord } from '@/lib/steps';
@@ -10,7 +10,9 @@ import { useToast } from './Toast';
 // Feedback on a task, opened from its "Feedback" button: everyone who can comment on the list can rate the
 // experience (1-10) and/or say how it was, and reply to each other's feedback. Your own can be deleted, and the
 // list's owner can delete any. Newest conversation last, replies under the feedback they answer.
-export default function Feedback({ list, task, user, isOwner }) {
+// lists: my open lists (to find my Re-done list) · canFile: I can change the task, so feedback saying it was
+// "re-done" files it (see fileRedone in lib/data.js)
+export default function Feedback({ list, task, user, isOwner, lists = [], canFile = false }) {
   const toast = useToast();
   const [items, setItems] = useState(null);
   const [rating, setRating] = useState(0);
@@ -39,8 +41,20 @@ export default function Feedback({ list, task, user, isOwner }) {
       done();
     } catch (err) {
       toast(`Not saved: ${friendlyError(err)}`, 'err');
+      setBusy(false);
+      return;
     }
     setBusy(false);
+    // the feedback says it was re-done: file it (after the feedback is saved, so it moves along with the task)
+    if (canFile && saysRedone(fields.text)) {
+      try {
+        const r = await fileRedone(list, task, user, lists);
+        if (r.moved) toast({ title: 'Re-done', description: `“${task.text}” moved to your “${r.moved.title}” list` });
+        else if (r.marked) toast({ title: 'Re-done', description: `“${task.text}” is on the Re-done tab in My List` });
+      } catch (err) {
+        toast(`Not filed as re-done: ${friendlyError(err)}`, 'err');
+      }
+    }
   }
   const remove = (f) => deleteFeedback(list, task, f)
     .then(() => toast(f.replyTo ? 'Reply deleted' : 'Feedback deleted'))

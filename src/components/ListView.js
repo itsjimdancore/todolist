@@ -19,7 +19,7 @@ import { PERMISSIONS, canComment, canWrite, roleLabel } from '@/lib/permissions'
 import { shownName } from '@/lib/people';
 import PeopleStack from './PeopleStack';
 import BackLink from './BackLink';
-import { byDue, dueLabel, monthLabel } from '@/lib/dates';
+import { byDue, dueLabel, monthLabel, rangeLabel } from '@/lib/dates';
 import { stepsPatch } from '@/lib/steps';
 import { useToast } from './Toast';
 import AddTask from './AddTask';
@@ -32,6 +32,7 @@ import ShareModal from './ShareModal';
 import Loading from './Loading';
 import TaskDetails from './TaskDetails';
 import { inDropdown } from './Select';
+import SearchBox, { has, norm } from './SearchBox';
 
 // lists: my open lists (from My List), so a task can be grouped into one of them, or ungrouped back to where it was
 // unplacedExists: I already have an Unplaced list (where a task that wasn't grouped goes when it's ungrouped)
@@ -52,6 +53,7 @@ export default function ListView({ list, role, user, contacts, back, lists = [],
   const [title, setTitle] = useState(list.title);
   const [openId, setOpenId] = useState(null); // the task whose details popup is open
   const [groupFrom, setGroupFrom] = useState(null); // the task whose "Group into a list" dialog is open
+  const [query, setQuery] = useState(''); // search this list's tasks
 
   useEffect(() => setTitle(list.title), [list.title]);
 
@@ -101,6 +103,13 @@ export default function ListView({ list, role, user, contacts, back, lists = [],
   // sorted by due date (see byDue): setting or changing a date moves the task into place
   const active = (tasks || []).filter((t) => !t.archived).sort(byDue);
   const archived = (tasks || []).filter((t) => t.archived);
+  // searching: a task's text, its notes (every step's text), location and links
+  const q = norm(query);
+  const matches = (t) => !q || has(t.text, q) || has(t.notes, q) || has(t.location, q) ||
+    (t.links || []).some((l) => has(l.title, q) || has(l.url, q));
+  const shownActive = active.filter(matches);
+  const shownArchived = archived.filter(matches);
+  const archOpen = showArchived || (!!q && shownArchived.length > 0); // archived matches show without opening Archived
   const someoneCanComment = members.some((m) => canComment(m.permission));
   const named = Object.fromEntries((contacts || []).map((c) => [c.email, c]));
   const everyone = [ownerPerson, ...members.map((m) => ({ email: m.email, displayName: named[m.email]?.displayName }))];
@@ -149,7 +158,7 @@ export default function ListView({ list, role, user, contacts, back, lists = [],
     },
     ungroupTo: originOf(t)?.title || (isUnplaced(list) ? '' : 'Unplaced'),
     // rate the experience, say how it was, reply to each other: whoever can comment on the list
-    feedback: comment ? () => <Feedback list={list} task={t} user={user} isOwner={isOwner} /> : null,
+    feedback: comment ? () => <Feedback list={list} task={t} user={user} isOwner={isOwner} lists={lists} canFile={write} /> : null,
   });
 
   // resolves true once saved, so the dialog can close (or stay open after it failed)
@@ -178,6 +187,8 @@ export default function ListView({ list, role, user, contacts, back, lists = [],
         run(updateTask(list, t, user, { location }), location ? 'Location saved' : 'Location removed'),
       steps: (steps) => run(updateTask(list, t, user, stepsPatch(steps)), 'Saved'),
       due: p.onDue,
+      until: (until) => (t.until || null) !== until &&
+        run(updateTask(list, t, user, { until: until || null }, 'task-due', until || t.due), until ? `Runs ${rangeLabel(t.due, until).toLowerCase()}` : 'Just the one day now'),
       month: p.onMonth,
       rating: (rating) => run(updateTask(list, t, user, { rating }), rating ? `Rated ${rating}/10` : 'Rating removed'),
       schedule: (due, start, mins) => {
@@ -267,6 +278,13 @@ export default function ListView({ list, role, user, contacts, back, lists = [],
               <span className="count">{tasks ? `${active.filter((t) => t.done).length}/${active.length} done` : ''}</span>
             </div>
 
+            {tasks?.length > 0 && (
+              <div className="lv-search">
+                <SearchBox value={query} onChange={setQuery} placeholder="Search this list"
+                  found={shownActive.length + shownArchived.length} />
+              </div>
+            )}
+
             {write && (
               <AddTask list={list} user={user} />
             )}
@@ -274,17 +292,22 @@ export default function ListView({ list, role, user, contacts, back, lists = [],
 
           <ul className="tasks">
             {tasks === null && <li className="empty"><Loading hint="Getting your tasks" /></li>}
-            {tasks && active.length === 0 && <li className="empty">No open tasks.{write ? ' Add one above.' : ''}</li>}
-            {active.map((t) => <TaskItem key={t.id} {...taskProps(t)} />)}
+            {tasks && active.length === 0 && !q && <li className="empty">No open tasks.{write ? ' Add one above.' : ''}</li>}
+            {q && shownActive.length === 0 && (
+              <li className="empty">
+                No open task matches “{query.trim()}”.{shownArchived.length > 0 && ' Some archived ones do, below.'}
+              </li>
+            )}
+            {shownActive.map((t) => <TaskItem key={t.id} {...taskProps(t)} />)}
           </ul>
 
-          <button className="arch-toggle" type="button" onClick={() => setShowArchived((s) => !s)} aria-expanded={showArchived}>
-            {showArchived ? '▾' : '▸'} Archived ({archived.length})
+          <button className="arch-toggle" type="button" onClick={() => setShowArchived((s) => !s)} aria-expanded={archOpen}>
+            {archOpen ? '▾' : '▸'} Archived ({q ? `${shownArchived.length} of ${archived.length}` : archived.length})
           </button>
-          {showArchived && (
+          {archOpen && (
             <ul className="tasks">
-              {archived.length === 0 && <li className="empty">Nothing archived.</li>}
-              {archived.map((t) => <TaskItem key={t.id} {...taskProps(t)} />)}
+              {shownArchived.length === 0 && <li className="empty">{q ? 'No archived task matches.' : 'Nothing archived.'}</li>}
+              {shownArchived.map((t) => <TaskItem key={t.id} {...taskProps(t)} />)}
             </ul>
           )}
         </section>

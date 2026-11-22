@@ -5,6 +5,7 @@ import { stepsPatch } from '@/lib/steps';
 import {
   DEFAULT_MINS, addDays, dueLabel, fromKey, fromMin, hourLabel, isOverdue, longDay, monthDays,
   monthLabel, monthTitle, snap, time12, timeRange, toKey, toMin, todayKey, weekday,
+  daysOf, lastDay, rangeLabel,
 } from '@/lib/dates';
 import { friendlyError } from '@/lib/firebase';
 import { useHolidayCountries, useHolidayCountry, useHolidays } from '@/lib/holidays';
@@ -121,7 +122,8 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
   // in a day: all-day tasks first, then by time
   const inDay = (a, b) => !!a.t.start - !!b.t.start || (a.t.start || '').localeCompare(b.t.start || '') || sorter(a, b);
   const byDay = new Map();
-  for (const e of entries) if (e.t.due) byDay.set(e.t.due, [...(byDay.get(e.t.due) || []), e]);
+  // a task that runs over several days (due … until) shows on each of them
+  for (const e of entries) for (const d of daysOf(e.t)) byDay.set(d, [...(byDay.get(d) || []), e]);
   for (const items of byDay.values()) items.sort(inDay);
   const undated = entries.filter((e) => !e.t.due && !e.t.done).sort(sorter);
   const canAdd = !!user; // a new task can always go into a new list of your own (or stay unplaced)
@@ -142,6 +144,9 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
     // just the day (keeps the time); no day = no time either
     due: ({ t, l }, due) => t.due !== due &&
       run(updateTask(l, t, user, due ? { due, month: null } : { due: null, start: null, mins: null }), due ? `Due ${when(due, t.start, t.mins)}` : 'Due date removed'),
+    // the last day of a task that runs over several days (null: just its one day)
+    until: ({ t, l }, until) => (t.until || null) !== until &&
+      run(updateTask(l, t, user, { until: until || null }, 'task-due', until || t.due), until ? `Runs ${rangeLabel(t.due, until).toLowerCase()}` : 'Just the one day now'),
     // sometime during a month instead of on a day: no day, no time (it then waits with the tasks that have no day)
     month: ({ t, l }, month) => (t.month || null) !== month &&
       run(updateTask(l, t, user, month ? { month, due: null, start: null, mins: null } : { month: null }),
@@ -607,7 +612,7 @@ function rangeTitle(a, b) {
 // One task in a day: time (if any), list colour (or a green check when done), title, initials of who added it
 function Chip({ entry, today, ...props }) {
   const { t, l } = entry;
-  const late = !t.done && t.due < today;
+  const late = !t.done && lastDay(t) < today;
   const by = shownName(t.createdByName, t.createdBy) || 'Someone';
   return (
     <button type="button" className={['chip', t.done && 'done', late && 'late', canWrite(l.role) && 'can-drag'].filter(Boolean).join(' ')}
@@ -1069,6 +1074,7 @@ function TaskPanel({ entry, actions, onClose }) {
     location: (location) => actions.location(entry, location),
     steps: (steps) => actions.steps(entry, steps),
     due: (due) => actions.due(entry, due),
+    until: (until) => actions.until(entry, until),
     month: (month) => actions.month(entry, month),
     rating: (rating) => actions.rating(entry, rating),
     schedule: (due, start, mins) => actions.schedule(entry, due, start, mins),

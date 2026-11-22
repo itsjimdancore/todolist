@@ -5,11 +5,16 @@ import { canWrite, roleLabel } from '@/lib/permissions';
 import { Avatar, colorFor, shownName, timeAgo } from '@/lib/people';
 import ListMenu from './ListMenu';
 import Loading from './Loading';
+import { redoneListOf, unmarkRedone, updateTask } from '@/lib/data';
+import { rangeLabel } from '@/lib/dates';
+import { friendlyError } from '@/lib/firebase';
+import { useToast } from './Toast';
 
 const TABS = {
   active: { label: 'All lists', empty: '' },
   favorites: { label: 'Favourites', empty: 'Star a list from its ⋮ menu to see it here.' },
   archived: { label: 'Archived', empty: 'Nothing archived.' },
+  redone: { label: 'Re-done', empty: '' },
 };
 
 // Move one id to a new position in a list of ids
@@ -43,7 +48,7 @@ export function Hl({ text = '', q }) {
 
 // Every list I can open, as cards in a 3-column grid. On "All lists" the cards can be dragged into my own order.
 // top: shown above the cards on All lists (the Unplaced tasks)
-export default function Board({ lists, tasksByList, favorites, actions, onOpen, onNew, onReorder, top = null }) {
+export default function Board({ lists, tasksByList, favorites, actions, onOpen, onNew, onReorder, top = null, user = null }) {
   const [tab, setTab] = useState('active');
   const [query, setQuery] = useState('');
   const q = query.trim().toLowerCase();
@@ -55,8 +60,14 @@ export default function Board({ lists, tasksByList, favorites, actions, onOpen, 
     active: (l) => !l.archived,
     favorites: (l) => !l.archived && favorites.has(l.id),
     archived: (l) => l.archived,
+    redone: () => false, // its own view (RedoneTab)
   };
-  const count = (k) => lists.filter(pick[k]).length;
+  // Re-done: my Re-done list, and tasks in my other lists that feedback said were re-done
+  const redoneList = user ? redoneListOf(lists, user.uid) : null;
+  const marked = lists.filter((l) => !l.archived && l.id !== redoneList?.id)
+    .flatMap((l) => (tasksByList[l.id] || []).filter((t) => t.redone && !t.archived).map((t) => ({ t, l })));
+  const redoneCount = (redoneList ? (tasksByList[redoneList.id] || []).filter((t) => !t.archived).length : 0) + marked.length;
+  const count = (k) => (k === 'redone' ? redoneCount : lists.filter(pick[k]).length);
   const shown = lists.filter(pick[tab]); // already in my order
   const shownIds = shown.map((l) => l.id);
   const shownKey = shownIds.join();
@@ -170,6 +181,9 @@ export default function Board({ lists, tasksByList, favorites, actions, onOpen, 
             </div>
           )}
         </>
+      ) : tab === 'redone' ? (
+        <RedoneTab list={redoneList} marked={marked} tasks={redoneList ? tasksByList[redoneList.id] : null} favorite={!!redoneList && favorites.has(redoneList.id)}
+          actions={actions} onOpen={onOpen} user={user} />
       ) : shown.length === 0 && tab !== 'active' ? (
         <div className="muted board-empty">{TABS[tab].empty}</div>
       ) : (
@@ -192,6 +206,79 @@ export default function Board({ lists, tasksByList, favorites, actions, onOpen, 
         </>
       )}
       </div>
+    </div>
+  );
+}
+
+// My List's Re-done tab: my "Re-done" list (where Unplaced tasks go when feedback says they were re-done), then
+// the tasks still in their own lists that feedback said were re-done. Each opens its list, or comes off the tab.
+function RedoneTab({ list, tasks, favorite, marked, actions, onOpen, user }) {
+  const toast = useToast();
+  const takeOff = ({ t, l }) => unmarkRedone(l, t, user)
+    .then(() => toast({ title: 'Off the Re-done tab', description: `“${t.text}” stays in “${l.title}”` }))
+    .catch((e) => toast(`Not saved: ${friendlyError(e)}`, 'err'));
+  if (!list && !marked.length) {
+    return (
+      <div className="muted board-empty">
+        Nothing re-done yet. Say “re-done” in a task&apos;s feedback and it shows up here: an Unplaced task moves into
+        your Re-done list, a task in a list stays there and is listed below it.
+      </div>
+    );
+  }
+  // the tasks placed in the Re-done list (from Unplaced): open ones first
+  const placed = (tasks || []).filter((t) => !t.archived).sort((a, b) => a.done - b.done);
+  const toggle = (t) => updateTask(list, t, user, { done: !t.done })
+    .catch((e) => toast(`Not saved: ${friendlyError(e)}`, 'err'));
+  return (
+    <div className="redone">
+      {list && (
+        <section className="redone-sec" aria-labelledby="redone-list-h">
+          <div className="redone-sec-h">
+            <h2 id="redone-list-h" className="letters-h">
+              From Unplaced · in your “{list.title}” list <span className="count">{placed.length}</span>
+            </h2>
+            <button type="button" className="btn small" onClick={() => onOpen(list.id)}>Open list</button>
+            <ListMenu list={list} favorite={favorite} actions={actions} />
+          </div>
+          {tasks === null || tasks === undefined ? <Loading variant="inline" /> : placed.length === 0 ? (
+            <p className="muted redone-empty">No tasks in it right now.</p>
+          ) : (
+            <ul className="redone-rows">
+              {placed.map((t) => (
+                <li key={t.id} className={t.done ? 'redone-r done' : 'redone-r'}>
+                  <input type="checkbox" checked={t.done} disabled={!canWrite(list.role)} onChange={() => toggle(t)}
+                    aria-label={`Mark “${t.text}” ${t.done ? 'not done' : 'done'}`} />
+                  <div className="redone-b">
+                    <span className="redone-t">{t.text}</span>
+                    {t.due && <span className="muted redone-m">{rangeLabel(t.due, t.until)}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+      {marked.length > 0 && (
+        <section className="redone-sec" aria-labelledby="redone-h">
+          <h2 id="redone-h" className="letters-h">Re-done in their lists <span className="count">{marked.length}</span></h2>
+          <ul className="redone-rows">
+            {marked.map(({ t, l }) => (
+              <li key={`${l.id}/${t.id}`} className={t.done ? 'redone-r done' : 'redone-r'}>
+                <span className="li-mark" style={{ background: colorFor(l.id) }} aria-hidden="true">{(l.title || '?').trim()[0]?.toUpperCase()}</span>
+                <div className="redone-b">
+                  <span className="redone-t">{t.text}</span>
+                  <button type="button" className="link" onClick={() => onOpen(l.id)}>in “{l.title}”</button>
+                </div>
+                {canWrite(l.role) && (
+                  <button type="button" className="btn small" onClick={() => takeOff({ t, l })} title="Take it off this tab (it stays in its list)">
+                    Take off
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

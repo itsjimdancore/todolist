@@ -1,7 +1,8 @@
 'use client';
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { displayName, nickOf, timeAgo } from '@/lib/people';
 import ListMenu from './ListMenu';
+import SearchBox, { has, norm } from './SearchBox';
 
 // A small number from a letter's id, so each letter keeps the same burn and tilt every time
 function hashOf(id = '') {
@@ -43,22 +44,29 @@ const firstLine = (body) => (body || '').split('\n').map((s) => s.trim()).find(B
 
 // The Love Letters page: the ones I wrote, and the ones written to me
 export default function Letters({ letters, contacts, favorites, actions, onOpen, onNew, me = '' }) {
+  const [query, setQuery] = useState('');
+  const q = norm(query);
   const named = Object.fromEntries(contacts.map((c) => [c.email, c]));
   const nameFor = (email) => displayName(named[email] || { email });
-  const open = letters.filter((l) => !l.archived);
-  const mine = open.filter((l) => l.role === 'owner');
   // my partner's letters (lib/partner.js) are theirs, not written to me, unless they're for me
   const isForMe = (l) => l.role !== 'owner' && (l.role !== 'partner' || (l.memberEmails || []).includes(me));
+  const whoOf = (l) => {
+    const to = l.memberEmails?.[0];
+    return l.role === 'owner' || (l.role === 'partner' && !isForMe(l))
+      ? (to ? `To ${nameFor(to)}` : 'Not sent yet')
+      : `From ${nickOf(l.ownerEmail) || l.ownerName || l.ownerEmail}`;
+  };
+  // searching: a letter's title, what's written in it, and who it's to or from
+  const shown = q ? letters.filter((l) => has(l.title, q) || has(l.body, q) || has(whoOf(l), q)) : letters;
+  const open = shown.filter((l) => !l.archived);
+  const mine = open.filter((l) => l.role === 'owner');
   const forMe = open.filter(isForMe);
   const partners = open.filter((l) => l.role === 'partner' && !isForMe(l));
   const partnerName = partners[0] ? nickOf(partners[0].ownerEmail) || (partners[0].ownerName || partners[0].ownerEmail).split(' ')[0] : '';
-  const archived = letters.filter((l) => l.archived);
+  const archived = shown.filter((l) => l.archived);
 
   const card = (l) => {
-    const to = l.memberEmails?.[0];
-    const who = l.role === 'owner' || (l.role === 'partner' && !isForMe(l))
-      ? (to ? `To ${nameFor(to)}` : 'Not sent yet')
-      : `From ${nickOf(l.ownerEmail) || l.ownerName || l.ownerEmail}`;
+    const who = whoOf(l);
     const preview = firstLine(l.body);
     return (
       <BurntPaper key={l.id} seed={l.id} className="letter-card" role="button" tabIndex={0}
@@ -95,23 +103,40 @@ export default function Letters({ letters, contacts, favorites, actions, onOpen,
       </header>
 
       <div className="page-body">
-      <section className="letters-sec" aria-label="Written by you">
-        <h2 className="letters-h">Written by you <span className="count">{mine.length}</span></h2>
-        <div className="letters">
-          {mine.map(card)}
-          <button type="button" className="letter-new" onClick={onNew}>
-            <span aria-hidden="true">+</span>
-            {mine.length ? 'Write another letter' : 'Write your first love letter'}
-          </button>
+      {letters.length > 0 && (
+        <div className="letters-tools">
+          <SearchBox value={query} onChange={setQuery} placeholder="Search letters" found={shown.length} />
         </div>
-      </section>
+      )}
 
-      <section className="letters-sec" aria-label="For you">
-        <h2 className="letters-h">For you <span className="count">{forMe.length}</span></h2>
-        {forMe.length ? <div className="letters">{forMe.map(card)}</div> : (
-          <p className="muted letters-empty">Letters written to you appear here.</p>
-        )}
-      </section>
+      {q && shown.length === 0 && (
+        <p className="muted letters-empty">No letter matches “{query.trim()}”.</p>
+      )}
+
+      {/* while searching, only the sections with a match show */}
+      {(!q || mine.length > 0) && (
+        <section className="letters-sec" aria-label="Written by you">
+          <h2 className="letters-h">Written by you <span className="count">{mine.length}</span></h2>
+          <div className="letters">
+            {mine.map(card)}
+            {!q && (
+              <button type="button" className="letter-new" onClick={onNew}>
+                <span aria-hidden="true">+</span>
+                {mine.length ? 'Write another letter' : 'Write your first love letter'}
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {(!q || forMe.length > 0) && (
+        <section className="letters-sec" aria-label="For you">
+          <h2 className="letters-h">For you <span className="count">{forMe.length}</span></h2>
+          {forMe.length ? <div className="letters">{forMe.map(card)}</div> : (
+            <p className="muted letters-empty">Letters written to you appear here.</p>
+          )}
+        </section>
+      )}
 
       {partners.length > 0 && (
         <section className="letters-sec" aria-label={`${partnerName}'s letters`}>

@@ -62,7 +62,7 @@ export default function TaskItem({ task, write, me, onOpen, onToggle, onEdit, on
         )}
       </div>
       <DuePicker value={task.due || null} month={task.month || null} task={task} canEdit={write && !task.archived}
-        onChange={onDue} onMonth={onMonth} time={task.start || null} />
+        onChange={onDue} onMonth={onMonth} time={task.start || null} until={task.until || null} />
       <span className="by" title={`Updated ${timeAgo(task.updatedAt)}${edited}`}>{by}</span>
       {write && (
         <TaskMenu task={task} onEdit={startEdit} onOpen={onOpen} onLink={() => setLinking(true)} onArchive={onArchive} onDelete={onDelete}

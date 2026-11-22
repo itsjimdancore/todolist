@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { createList, deleteTask, moveTask, updateTask } from '@/lib/data';
-import { dueLabel, isOverdue, monthLabel, timeRange } from '@/lib/dates';
+import { isOverdue, monthLabel, rangeLabel, timeRange } from '@/lib/dates';
 import { friendlyError } from '@/lib/firebase';
 import { canWrite } from '@/lib/permissions';
 import Feedback from './Feedback';
@@ -59,7 +59,7 @@ export default function Unplaced({ list, tasks, lists, user }) {
               <span className="up-t">{t.text}</span>
               <span className="up-m">
                 {t.due ? (
-                  <span className={isOverdue(t) ? 'late-txt' : ''}>{dueLabel(t.due)}{t.start ? `, ${timeRange(t.start, t.mins)}` : ''}</span>
+                  <span className={isOverdue(t) ? 'late-txt' : ''}>{rangeLabel(t.due, t.until)}{t.start ? `, ${timeRange(t.start, t.mins)}` : ''}</span>
                 ) : t.month ? <span className={isOverdue(t) ? 'late-txt' : ''}>{monthLabel(t.month)}</span> : 'No date'}
                 {t.location && <span className="up-loc"><PinIcon />{t.location}</span>}
               </span>
@@ -101,7 +101,7 @@ export default function Unplaced({ list, tasks, lists, user }) {
                 </button>
               )}
             </div>
-            {fbOpen === t.id && <div className="t-fb up-fb"><Feedback list={list} task={t} user={user} isOwner /></div>}
+            {fbOpen === t.id && <div className="t-fb up-fb"><Feedback list={list} task={t} user={user} isOwner lists={lists} canFile /></div>}
           </li>
         ))}
       </ul>
