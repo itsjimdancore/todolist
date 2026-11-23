@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { fb, firebaseConfigured } from '@/lib/firebase';
-import Loading from '@/components/Loading';
+import { Splash } from '@/components/Loading';
 import Login from '@/components/Login';
 import Workspace from '@/components/Workspace';
 
@@ -17,7 +17,7 @@ export default function Home() {
   }, []);
 
   if (!firebaseConfigured) return <SetupNeeded />;
-  if (user === undefined) return <Loading variant="page" />;
+  if (user === undefined) return <Splash hint="Signing you in" />;
   if (!user) return <Login />;
   return <Workspace key={user.uid} user={user} />;
 }

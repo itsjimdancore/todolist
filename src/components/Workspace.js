@@ -59,7 +59,7 @@ import Notifications, { NotificationsPage, useNotifications } from './Notificati
 import ListView from './ListView';
 import Letters from './Letters';
 import LetterView from './LetterView';
-import Loading from './Loading';
+import Loading, { Splash, useSplash } from './Loading';
 import Music from './Music';
 import Partner, { PartnerPrompt } from './Partner';
 import MusicPlayer from './MusicPlayer';
@@ -509,6 +509,10 @@ function WorkspaceInner({ user }) {
   const calLists = [...openLists, ...unplacedAll, ...sharedCalLists];
   // every list's tasks (archived too, so My List can search them); the calendar only uses the open lists'
   const allTasks = useAllTasks([...arranged, ...unplacedAll, ...sharedCalLists]);
+  // the startup splash stays up until my lists and their tasks are in (and at least ~5 s), then fades
+  const tasksIn = lists !== null && [...arranged, ...unplacedAll].every((l) => l.id in allTasks);
+  const splash = useSplash(tasksIn);
+  const splashHint = lists === null ? 'Getting your lists ready' : !tasksIn ? 'Loading your tasks' : 'Almost there';
   // the sidebar's count is for my own lists only
   const dueNow = dueNowCount(taskEntries(unplaced ? [...openLists, unplaced] : openLists, allTasks));
   // Shares + due / overdue reminders, for the bell and the Notifications page
@@ -736,6 +740,8 @@ function WorkspaceInner({ user }) {
           onRename={(l, t) => report(renameList(l, user, t), 'Name saved')}
           onDelete={onDelete} onLeave={onLeave} onClose={() => setDialog(null)} />
       )}
+
+      {splash !== 'off' && <Splash fading={splash === 'fading'} hint={splashHint} />}
     </div>
   );
 }

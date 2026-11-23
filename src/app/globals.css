@@ -1037,6 +1037,10 @@ ul.tasks { list-style: none; margin: 0; padding: 0; }
 .loading.page { --ring: clamp(112px, 28vw, 160px); flex: 1; gap: 28px; min-height: 100vh; min-height: 100dvh;
   padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
 .main > .loading.page, .chat-page > .loading.page { min-height: 0; }
+/* the startup splash: over everything (but under call screens) while the app loads behind it, then fades */
+.splash { position: fixed; inset: 0; z-index: 900; display: flex; background: var(--bg); transition: opacity .4s ease; }
+.splash.fading { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .splash { transition: none; } }
 .loading.page .loader-text { gap: 10px; max-width: min(18rem, 100%); }
 .loading.page .loader-title { font-size: clamp(18px, 4.5vw, 22px); font-weight: 700; letter-spacing: -.02em; }
 .loading.page .loader-hint { font-size: 14px; }
