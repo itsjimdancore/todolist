@@ -514,7 +514,8 @@ export default function Calendar({ lists, byList, user, onOpen, shares = null, w
                   const items = byDay.get(key) || [];
                   const hol = holidays.byDay.get(key);
                   const cls = ['cal-day', !sameMonth(key, ym) && 'out', key === today && 'today', key === cursor && 'sel', hol && 'holiday',
-                    dropDay === key && 'drop', quick?.day === key && quick.start == null && 'pending', rangeCls(items)].filter(Boolean).join(' ');
+                    dropDay === key && 'drop', quick?.day === key && quick.start == null && 'pending',
+                    rangeCls(key, byDay, weekday(fromKey(key)) === 0, weekday(fromKey(key)) === 6)].filter(Boolean).join(' ');
                   return (
                     <div key={key} className={cls} {...cellProps(key, items)}>
                       <div className="cal-day-h">
@@ -625,11 +626,19 @@ function rangeTitle(a, b) {
   return `${left} – ${db.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 }
 
-// A day inside a task's run (it has an Until): outlined orange, or green once every such task on it is ticked
-function rangeCls(items = []) {
-  const ranged = items.filter((e) => isRanged(e.t));
-  if (!ranged.length) return null;
-  return ranged.every((e) => e.t.done) ? 'in-range range-done' : 'in-range';
+// A day inside a task's run (it has an Until): part of one continuous rounded band from the start day to the
+// due day, deep orange, or green once every such task on it is ticked. The band is capped (rounded) where the
+// run starts or ends, where the row breaks (rowStart / rowEnd), or where the next day's band differs.
+const rangedOn = (items = []) => items.filter((e) => isRanged(e.t));
+const rangeState = (ranged) => (!ranged.length ? null : ranged.every((e) => e.t.done) ? 'done' : 'open');
+function rangeCls(key, byDay, rowStart = false, rowEnd = false) {
+  const ranged = rangedOn(byDay.get(key));
+  const state = rangeState(ranged);
+  if (!state) return null;
+  const joins = (other, runsOn) => runsOn && rangeState(rangedOn(byDay.get(other))) === state;
+  const fromPrev = !rowStart && joins(addDays(key, -1), ranged.some((e) => e.t.due < key));
+  const toNext = !rowEnd && joins(addDays(key, 1), ranged.some((e) => lastDay(e.t) > key));
+  return ['in-range', state === 'done' && 'range-done', !fromPrev && 'range-start', !toNext && 'range-end'].filter(Boolean).join(' ');
 }
 
 // One task in a day: time (if any), list colour (or a green check when done), title, initials of who added it
@@ -720,9 +729,9 @@ function WeekView({ days, today, byDay, holidays, preview, dropDay, quick, grid,
       </div>
       <div className="wk-allday" style={cols} role="grid" aria-label="All-day tasks" ref={grid} onKeyDown={onKey}>
         <span className="wk-gutter-l">All day</span>
-        {days.map((k) => {
+        {days.map((k, i) => {
           const items = (byDay.get(k) || []).filter((e) => !e.t.start);
-          const cls = ['wk-cell', dropDay === k && 'drop', quick?.day === k && quick.start == null && 'pending', rangeCls(byDay.get(k))].filter(Boolean).join(' ');
+          const cls = ['wk-cell', dropDay === k && 'drop', quick?.day === k && quick.start == null && 'pending', rangeCls(k, byDay, i === 0, i === days.length - 1)].filter(Boolean).join(' ');
           return (
             <div key={k} className={cls} {...cellProps(k, items, { 'data-allday': 'true' })}>
               {quick?.day === k && quick.start == null && <span className="chip ghost-chip">(No title)</span>}
@@ -854,7 +863,8 @@ function MiniMonth({ year, month, today, cursor, byDay, holidays, onPickMonth, o
           if (d.getMonth() !== month) return <span key={key} className="mm-d out" aria-hidden="true" />;
           const hol = holidays.get(key);
           const n = (byDay.get(key) || []).length;
-          const cls = ['mm-d', weekday(d) >= 5 && 'wkend', key === today && 'today', key === cursor && 'sel', hol && 'holiday', rangeCls(byDay.get(key))].filter(Boolean).join(' ');
+          const cls = ['mm-d', weekday(d) >= 5 && 'wkend', key === today && 'today', key === cursor && 'sel', hol && 'holiday',
+            rangeCls(key, byDay, weekday(d) === 0 || d.getDate() === 1, weekday(d) === 6 || addDays(key, 1).slice(0, 7) !== key.slice(0, 7))].filter(Boolean).join(' ');
           const label = [longDay(key), hol && `public holiday: ${hol.name}`, n && `${n} task${n > 1 ? 's' : ''}`].filter(Boolean).join(', ');
           return (
             <button key={key} type="button" className={cls} title={label} aria-label={label} onClick={() => onPickDay(key)}>
